@@ -1,0 +1,11 @@
+Predictor error total: 0.0014534601688168773
+Predictor error per step: 0.00029069203376337545
+Predictor evals: 10
+
+ASR error total: 2.1757579472044208e-10
+ASR error per step: 2.1757579472044208e-12
+ASR evals: 201
+
+Simpson error total: 0.19241027493493817
+Simpson error per step: 0.03848205498698763
+Simpson evals: 11

@@ -1,0 +1,16 @@
+step size control for brokenpoly
+
+step_sizes = [0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.67]
+tol = 7.5e-6
+
+performance at integrating from 0 to 20:
+avg. error per step: 
+avg. number of steps: 
+
+network:
+n_hidden1 = 20
+n_hidden2 = 20
+inputs = tf.keras.Input(shape=(dim_state,), name='state')
+x = tf.keras.layers.Dense(n_hidden1, activation='elu')(inputs)
+x = tf.keras.layers.Dense(n_hidden2, activation='elu')(x)
+outputs = tf.keras.layers.Dense(dim_action)(x)

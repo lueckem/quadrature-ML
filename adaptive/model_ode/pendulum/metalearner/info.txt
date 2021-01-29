@@ -1,0 +1,32 @@
+basis_learner = model + const(0.05)
+error_tol = 0.00001
+integrator = RKDP()
+
+----params---
+	self.b = -0.2
+        self.a = 2
+        self.lamda = 5
+        self.d = 1
+
+	trained from t=0 to t=200 and x_0=[1,1]
+	Pendulum(switchpoints=(0.05, 3.3)
+
+----scaler---
+    scaler = StandardScaler()
+    scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
+    scaler.mean_[0] = 0.33
+    scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
+    scaler.scale_[0] = 0.1
+
+----model----
+    dim_state = dim_state * (memory + 1)
+    n_hidden = 5 * dim_state
+
+    inputs = tf.keras.Input(shape=(dim_state,), name='state')
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(inputs)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    outputs = tf.keras.layers.Dense(dim_action)(x)
+
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)

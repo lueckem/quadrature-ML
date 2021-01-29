@@ -1,0 +1,24 @@
+step_sizes = [0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
+error_tol = 0.0001
+integrator = RKDP()
+
+
+----scaler---
+    scaler = StandardScaler()
+    scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
+    scaler.mean_[0] = -0.045
+    scaler.scale_ = 10 * np.ones((dim_state * d + 1) * (memory + 1))
+    scaler.scale_[0] = 0.1
+
+----model----
+    dim_state = dim_state * (memory + 1)
+    n_hidden = 5 * dim_state
+
+    inputs = tf.keras.Input(shape=(dim_state,), name='state')
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(inputs)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    outputs = tf.keras.layers.Dense(dim_action)(x)
+
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
