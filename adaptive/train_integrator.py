@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.linear_model import LinearRegression
-from sklearn.externals.joblib import dump, load
+from joblib import dump, load
 from sklearn.preprocessing import StandardScaler
 from functions import Sinus, SuperposeSinus, BrokenPolynomial
 from adaptive.environments import IntegrationEnv
@@ -19,12 +19,13 @@ def main():
     dim_action = len(step_sizes)
     memory = 0
 
-    env = IntegrationEnv(fun=Sinus(), max_iterations=1000, initial_step_size=0.1,
-                         step_sizes=step_sizes, error_tol=0.0005, memory=memory, nodes_per_integ=dim_state,
-                         max_dist=20, x0=0)
-    predictor = PredictorQ(
-        build_value_model(dim_state=dim_state, dim_action=dim_action, filename='predictor', memory=memory),
-        load('scaler.bin'))
+    env = IntegrationEnv(fun=Sinus(), max_iterations=256, initial_step_size=0.075,
+                         error_tol=7.5e-6, nodes_per_integ=dim_state, memory=memory,
+                         x0=0, max_dist=20, step_size_range=(step_sizes[0], step_sizes[-1]))
+    predictor = PredictorQ(step_sizes=step_sizes,
+                           model=build_value_model(dim_state=dim_state, dim_action=dim_action, filename='predictor',
+                                                   memory=memory),
+                           scaler=load('scaler.bin'))
 
     # estimator = Estimator(build_estimator_model(dim_state, lr=0.0001, filename='estimator'), load('scaler.bin'),
     #                       threshold=100 * 7.5e-6)
@@ -41,7 +42,7 @@ def train_models(env, predictor, num_episodes, estimator=None):
     Parameters
     ----------
     env : IntegrationEnv
-    predictor: Predictor
+    predictor: PredictorQ
     num_episodes : int
     estimator : Estimator
     """
@@ -49,9 +50,9 @@ def train_models(env, predictor, num_episodes, estimator=None):
     models = []
     states, integrals = sample_trainingdata_from_predictor(env, predictor, num_episodes, estimator)
 
-    for step_size_idx in range(len(env.step_sizes)):
+    for step_size_idx in range(len(predictor.step_sizes)):
         print("{} samples for step_size {}".format(len(states[step_size_idx]), step_size_idx))
-        step_size = env.step_sizes[step_size_idx]
+        step_size = predictor.step_sizes[step_size_idx]
 
         if len(states[step_size_idx]) < 10:
             # there are not enough samples for a reliable calculation -> choose simpson
@@ -90,8 +91,8 @@ def train_models(env, predictor, num_episodes, estimator=None):
     dump(models, 'linreg_models_estim.bin', compress=True)
 
 
-def sample_trainingdata_from_predictor(env: IntegrationEnv, predictor: Predictor, num_episodes: int, estimator=None):
-    num_step_sizes = len(env.step_sizes)
+def sample_trainingdata_from_predictor(env: IntegrationEnv, predictor: PredictorQ, num_episodes: int, estimator=None):
+    num_step_sizes = len(predictor.step_sizes)
     states = [[] for _ in range(num_step_sizes)]
     integrals = [[] for _ in range(num_step_sizes)]
 

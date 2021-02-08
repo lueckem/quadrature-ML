@@ -8,7 +8,7 @@ from adaptive.experience import ExperienceODE
 from adaptive.predictor import PredictorQODE
 from adaptive.build_models import build_value_model, build_value_modelODE
 from adaptive.performance_tracker import PerformanceTrackerODE
-from sklearn.externals.joblib import dump, load
+from joblib import dump, load
 from sklearn.preprocessing import StandardScaler
 
 

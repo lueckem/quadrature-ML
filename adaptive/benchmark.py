@@ -3,7 +3,7 @@ from adaptive.environments import IntegrationEnv
 from adaptive.build_models import build_value_model
 from functions import Sinus, SuperposeSinus
 from adaptive.integrator import Integrator, Simpson, IntegratorLinReg
-from sklearn.externals.joblib import dump, load
+from joblib import dump, load
 from copy import deepcopy
 from adaptive.predictor import *
 

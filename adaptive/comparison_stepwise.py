@@ -3,7 +3,7 @@ import math
 from adaptive.environments import IntegrationEnv
 from adaptive.build_models import build_value_model, build_estimator_model
 from functions import Sinus, Pulse, StaggeredSinus, SuperposeSinus, Polynomial, BrokenPolynomial
-from sklearn.externals.joblib import dump, load
+from joblib import dump, load
 from scipy.integrate import quad, romberg
 from adaptive.adapt_simps import AdaptSimps, AdaptSimpsConstEvals, Simps
 from adaptive.boole import BoolesRule

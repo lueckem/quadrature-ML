@@ -1,6 +1,4 @@
 import numpy as np
-import math
-import tensorflow as tf
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from adaptive.build_models import build_value_model
@@ -10,7 +8,7 @@ from adaptive.predictor import PredictorQ
 from adaptive.integrator import Simpson, IntegratorLinReg, Boole
 from adaptive.performance_tracker import PerformanceTracker
 from functions import Sinus, SuperposeSinus, BrokenPolynomial
-from sklearn.externals.joblib import dump, load
+from joblib import dump, load
 
 
 def choose_action(actions, eps, dim_action):
@@ -97,15 +95,15 @@ def main():
     # 7.5e-6
     env = IntegrationEnv(fun=Sinus(), max_iterations=256, initial_step_size=0.075,
                          error_tol=7.5e-6, nodes_per_integ=dim_state, memory=memory,
-                         x0=-1, max_dist=2, step_size_range=(step_sizes[0], step_sizes[-1]))
+                         x0=0, max_dist=20, step_size_range=(step_sizes[0], step_sizes[-1]))
     # env = IntegrationEnv(fun=Sinus(), max_iterations=128, initial_step_size=0.1, step_sizes=step_sizes,
     #                      error_tol=0.0005, nodes_per_integ=dim_state, memory=memory)
     experience = Experience(batch_size=32)
 
     predictor = PredictorQ(step_sizes=step_sizes,
                            model=build_value_model(dim_state=dim_state, dim_action=dim_action,
-                                                   filename='predictor', lr=0.00001, memory=memory),
-                           scaler=load('scaler.bin'))
+                                                   filename=None, lr=0.00001, memory=memory),
+                           scaler=load('model_quad/model_sinus/Simpson/scaler.bin'))
     # integrator = IntegratorLinReg(step_sizes, load('linreg_models.bin'), load('scaler.bin'))
     # integrator = Boole()
     integrator = Simpson()
@@ -135,10 +133,10 @@ def main():
                 action = choose_action(actions, eps, dim_action)
             else:
                 action = choose_action3(actions, eps, dim_action)
-            # print(actions.squeeze()[action])
+            step_size = predictor.action_to_stepsize(action)
 
             # execute action
-            next_state, reward, done, _ = env.iterate(action, integrator)
+            next_state, reward, done, _ = env.iterate(step_size, integrator)
             steps += 1
             reward_total += reward
 
@@ -182,8 +180,9 @@ def save_scaler():
     # step_sizes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75]
     # step_sizes = [0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.4]
     step_sizes = [0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.67]
-    env = IntegrationEnv(fun=BrokenPolynomial(), max_iterations=256, initial_step_size=0.1,
-                         step_sizes=step_sizes, error_tol=0.0005, memory=1, nodes_per_integ=3)
+    env = IntegrationEnv(fun=Sinus(), max_iterations=256, initial_step_size=0.075,
+                         error_tol=7.5e-6, nodes_per_integ=3, memory=1,
+                         x0=-1, max_dist=2, step_size_range=(step_sizes[0], step_sizes[-1]))
 
     # build Scaler
     scaler = StandardScaler()
@@ -195,7 +194,8 @@ def visualize_predictor():
     step_sizes = [0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.67]
     dim_state = 3
     dim_action = len(step_sizes)
-    predictor = PredictorQ(model=build_value_model(dim_state=dim_state, dim_action=dim_action,
+    predictor = PredictorQ(step_sizes=step_sizes,
+                           model=build_value_model(dim_state=dim_state, dim_action=dim_action,
                                                    filename='predictor', lr=0.0001),
                            scaler=load('scaler.bin'))
 

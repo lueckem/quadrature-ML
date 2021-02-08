@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.linear_model import LinearRegression
-from sklearn.externals.joblib import dump, load
+from joblib import dump, load
 from sklearn.preprocessing import StandardScaler
 from functions import Sinus, SuperposeSinus, BrokenPolynomial
 from adaptive.environments import IntegrationEnv
@@ -20,13 +20,14 @@ def main():
     dim_action = len(step_sizes)
     memory = 1
 
-    env = IntegrationEnv(fun=BrokenPolynomial(), max_iterations=256, initial_step_size=0.075,
-                         step_sizes=step_sizes, error_tol=0.0005, memory=memory, nodes_per_integ=dim_state,
-                         max_dist=2, x0=-1)
+    env = IntegrationEnv(fun=Sinus(), max_iterations=256, initial_step_size=0.075,
+                         error_tol=7.5e-6, nodes_per_integ=dim_state, memory=memory,
+                         x0=0, max_dist=20, step_size_range=(step_sizes[0], step_sizes[-1]))
     scaler = load('scaler.bin')
-    predictor = PredictorQ(
-        build_value_model(dim_state=dim_state, dim_action=dim_action, filename='predictor', memory=memory),
-        load('scaler_mem1.bin'))
+    predictor = PredictorQ(step_sizes=step_sizes,
+                           model=build_value_model(dim_state=dim_state, dim_action=dim_action,
+                                                   filename=None, lr=0.00001, memory=memory),
+                           scaler=load('model_quad/model_sinus/Simpson/scaler.bin'))
     integrator = Simpson()
 
     estimator = Estimator(build_estimator_model(dim_state, lr=0.0001, filename='estimator'), scaler,
