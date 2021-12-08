@@ -913,6 +913,122 @@ class LorenzSystem(FunctionODE):
         return sol.t, sol.y.T
 
 
+class HenonHeiles(FunctionODE):
+    def __init__(self):
+        super().__init__()
+        self.lamda = self.choose_params()
+
+    @staticmethod
+    def choose_params():
+        return 1
+
+    def reset(self, reset_params=True):
+        self.evals = 0
+        if reset_params:
+            self.lamda = self.choose_params()
+
+    def __call__(self, t, x):
+        """
+        Parameters
+        ----------
+        t : float
+        x : np.ndarray
+            shape=(4,)
+
+        Returns
+        -------
+        np.ndarray
+        """
+        self.evals += 1
+        out = np.array([x[1],
+                        -x[0] - 2 * self.lamda * x[0] * x[2],
+                        x[3],
+                        -x[2] - self.lamda * (x[0] ** 2 - x[2] ** 2)])
+        return out
+
+    def solve(self, t_0, x_0, t_1, t_eval=None):
+        """
+        return solution x(t_1) of IVP x(t_0) = x_0
+
+        Parameters
+        ----------
+        t_0 : float
+        x_0 : np.ndarray
+        t_1 : float
+        t_eval : np.ndarray, optional
+            intermediate values at which the state x is calculated and returned
+
+        Returns
+        -------
+        np.ndarray
+        """
+
+        if t_eval is None:
+            sol = solve_ivp(self, (t_0, t_1), x_0)
+            return sol.y[:, -1]
+
+        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval)
+        return sol.t, sol.y.T
+
+
+class VanDerPol(FunctionODE):
+    def __init__(self):
+        super().__init__()
+        self.mu, self.amplitude, self.freq = self.choose_params()
+
+    @staticmethod
+    def choose_params():
+        mu = 1
+        amplitude = 0  # forcing
+        frequency = 1  # frequency of forcing
+        return mu, amplitude, frequency
+
+    def reset(self, reset_params=True):
+        self.evals = 0
+        if reset_params:
+            self.mu, self.amplitude, self.freq = self.choose_params()
+
+    def __call__(self, t, x):
+        """
+        Parameters
+        ----------
+        t : float
+        x : np.ndarray
+            shape=(2,)
+
+        Returns
+        -------
+        np.ndarray
+        """
+        self.evals += 1
+        out = np.array([x[1],
+                        self.mu * (1 - x[0] ** 2) * x[1] - x[0] + self.amplitude * np.sin(self.freq * t)])
+        return out
+
+    def solve(self, t_0, x_0, t_1, t_eval=None):
+        """
+        return solution x(t_1) of IVP x(t_0) = x_0
+
+        Parameters
+        ----------
+        t_0 : float
+        x_0 : np.ndarray
+        t_1 : float
+        t_eval : np.ndarray, optional
+            intermediate values at which the state x is calculated and returned
+
+        Returns
+        -------
+        np.ndarray
+        """
+        if t_eval is None:
+            sol = solve_ivp(self, (t_0, t_1), x_0)
+            return sol.y[:, -1]
+
+        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval)
+        return sol.t, sol.y.T
+
+
 def test_pendulum():
     switch = (0.05, 3.3)
     x0 = np.array([1, 1])
