@@ -517,12 +517,12 @@ class ODEEnv:
         times_to_plot = self.timesteps[id_min:id_max + 1]
         nodes_to_plot = np.array(self.nodes[id_min:id_max + 1])
 
-        num_steps = math.ceil((t_max - t_min) / (self.initial_step_size / 8.0))
-        t = np.linspace(times_to_plot[0], times_to_plot[-1], num_steps)
-        if id_min == 0:
-            t, x = self.fun.solve(self.t0, self.x0, t[-1], t_eval=t[1:-1])
-        else:
-            t, x = self.fun.solve(self.t0, self.x0, t[-1], t_eval=t[:-1])
+        # num_steps = math.ceil((t_max - t_min) / (self.initial_step_size / 8.0))
+        # t = np.linspace(times_to_plot[0], times_to_plot[-1], num_steps)
+        # if id_min == 0:
+        #     t, x = self.fun.solve(self.t0, self.x0, t[-1], t_eval=t[1:-1])
+        # else:
+        #     t, x = self.fun.solve(self.t0, self.x0, t[-1], t_eval=t[:-1])
 
         errors = self.errors[id_min:id_max]
         errors = [val for val in errors for _ in range(2)]
@@ -533,55 +533,24 @@ class ODEEnv:
         times_duplicates = [times_to_plot[0]] + [val for val in times_to_plot[1:-1] for _ in range(2)] +\
                            [times_to_plot[-1]]
 
-        # plt.rcParams.update({'font.size': 12})
-        # fig, axs = plt.subplots(5, sharex=True, figsize=(6, 6), dpi=300)
-        fig, axs = plt.subplots(5, sharex=True)
-
+        dim = self.x0.shape[0]
+        fig, axs = plt.subplots(dim + 2, sharex=True)
         color = 'tab:blue'
-        # axs[0].set_xlabel('t', color='k')
-        axs[0].set_ylabel(r'$x_1$', color=color)
-        # axs[0].plot(t, x[:, 0], '-', color='k')
-        # for idx in range(len(times_to_plot) - 1):
-        #     t0 = times_to_plot[idx]
-        #     t1 = times_to_plot[idx + 1]
-        #     x0 = nodes_to_plot[idx, :]
-        #     this_t, this_x = self.fun.solve(t0, x0, t1, t_eval=np.linspace(t0, t1, 12))
-        #     axs[0].plot(this_t, this_x[:, 0], '-', color='r')
-        axs[0].plot(times_to_plot, nodes_to_plot[:, 0], '-x', color=color)
-        axs[0].grid()
-
-        axs[1].set_ylabel(r'$x_2$', color=color)
-        # axs[1].plot(t, x[:, 1], '-', color='k')
-        # for idx in range(len(times_to_plot) - 1):
-        #     t0 = times_to_plot[idx]
-        #     t1 = times_to_plot[idx + 1]
-        #     x0 = nodes_to_plot[idx, :]
-        #     this_t, this_x = self.fun.solve(t0, x0, t1, t_eval=np.linspace(t0, t1, 12))
-        #     axs[1].plot(this_t, this_x[:, 1], '-', color='r')
-        axs[1].plot(times_to_plot, nodes_to_plot[:, 1], '-x', color=color)
-        axs[1].grid()
-
-        axs[2].set_ylabel(r'$x_3$', color=color)
-        # axs[1].plot(t, x[:, 1], '-', color='k')
-        # for idx in range(len(times_to_plot) - 1):
-        #     t0 = times_to_plot[idx]
-        #     t1 = times_to_plot[idx + 1]
-        #     x0 = nodes_to_plot[idx, :]
-        #     this_t, this_x = self.fun.solve(t0, x0, t1, t_eval=np.linspace(t0, t1, 12))
-        #     axs[1].plot(this_t, this_x[:, 1], '-', color='r')
-        axs[2].plot(times_to_plot, nodes_to_plot[:, 2], '-x', color=color)
-        axs[2].grid()
+        for i in range(dim):
+            axs[i].set_ylabel(r'$x_{}$'.format(i + 1), color=color)
+            axs[i].plot(times_to_plot, nodes_to_plot[:, i], '-x', color=color)
+            axs[i].grid()
 
         color = 'tab:red'
-        axs[3].set_ylabel('error', color=color)
-        axs[3].plot(times_duplicates, errors, 'x-', color=color)
-        axs[3].plot(times_duplicates, self.error_tol * np.ones(len(times_duplicates)), 'k-')
-        axs[3].grid()
+        axs[dim].set_ylabel('error', color=color)
+        axs[dim].plot(times_duplicates, errors, 'x-', color=color)
+        axs[dim].plot(times_duplicates, self.error_tol * np.ones(len(times_duplicates)), 'k-')
+        axs[dim].grid()
 
         color = 'tab:blue'
-        axs[4].set_ylabel('step size', color=color)
-        axs[4].plot(times_duplicates, deltas, 'x-', color=color)
-        axs[4].grid()
+        axs[dim + 1].set_ylabel('step size', color=color)
+        axs[dim + 1].plot(times_duplicates, deltas, 'x-', color=color)
+        axs[dim + 1].grid()
 
         fig.tight_layout()
         plt.subplots_adjust(hspace=0.2)

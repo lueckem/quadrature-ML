@@ -3,7 +3,7 @@ import math
 from matplotlib import pyplot as plt
 from adaptive.environments import ODEEnv
 from adaptive.integrator import ClassicRungeKutta, RKDP
-from functions import Rotation, LorenzSystem, Pendulum
+from functions import Rotation, LorenzSystem, Pendulum, VanDerPol, HenonHeiles
 from adaptive.experience import ExperienceODE
 from adaptive.predictor import PredictorQODE
 from adaptive.build_models import build_value_model, build_value_modelODE
@@ -15,23 +15,23 @@ from sklearn.preprocessing import StandardScaler
 def main():
     gamma = 0.0  # discount factor for future rewards
     num_episodes = 100000
-    step_sizes = [0.25, 0.27, 0.29, 0.31, 0.33, 0.36, 0.39, 0.42, 0.45, 0.48]
+    step_sizes = [0.42, 0.44, 0.46, 0.48, 0.5, 0.52, 0.56, 0.6]
     dim_state = 6  # nodes per integration step
-    d = 2  # dimension of the ODE state space
     dim_action = len(step_sizes)
     memory = 0  # how many integration steps the predictor can look back
-    x0 = np.array([1, 1])  # start point of integration
+    x0 = np.array([0, 0.5, 0, 0])  # start point of integration
+    d = x0.shape[0]  # dimension of the ODE state space
 
     # scale inputs of NN to have the order ~10^-1
     scaler = StandardScaler()
-    scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
-    scaler.mean_[0] = 0.33
+    scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))  # state = (h, k_1, ...)
+    # scaler.mean_[0] = 0.33
     scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
-    scaler.scale_[0] = 0.1
+    # scaler.scale_[0] = 0.1
 
-    env = ODEEnv(fun=Pendulum(switchpoints=(0.00001, 3.3)), max_iterations=10000, initial_step_size=0.25,
+    env = ODEEnv(fun=HenonHeiles(), max_iterations=10000, initial_step_size=step_sizes[0],
                  step_size_range=(step_sizes[0], step_sizes[-1]),
-                 error_tol=0.00001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=21)
+                 error_tol=0.00001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=100)
     experience = ExperienceODE(batch_size=64)
 
     predictor = PredictorQODE(step_sizes=step_sizes,
@@ -50,7 +50,7 @@ def main():
         loss_this_episode = 0
         steps = 0
         done = False
-        eps = 0.75
+        eps = 0.75  # randomization
         print('episode: {}'.format(episode))
 
         while not done:

@@ -67,7 +67,7 @@ def build_value_modelODE(dim_state, dim_action, filename=None, lr=0.001, memory=
     n_hidden = 5 * dim_state
 
     inputs = tf.keras.Input(shape=(dim_state,), name='state')
-    x = tf.keras.layers.Dense(n_hidden, activation='relu')(inputs)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(inputs)  # !regularizer!
     x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
     x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
     x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
@@ -75,7 +75,7 @@ def build_value_modelODE(dim_state, dim_action, filename=None, lr=0.001, memory=
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     optimizer = tf.keras.optimizers.Adam(lr=lr)
-    model.compile(optimizer=optimizer, loss='mse')
+    model.compile(optimizer=optimizer, loss='mse')  # !huber loss!
 
     if filename is not None:
         model.load_weights(filename)

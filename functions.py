@@ -933,7 +933,7 @@ class HenonHeiles(FunctionODE):
         ----------
         t : float
         x : np.ndarray
-            shape=(4,)
+            shape=(4,), [x, p_x, y, p_y]
 
         Returns
         -------

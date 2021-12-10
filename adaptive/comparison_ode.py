@@ -3,7 +3,7 @@ import math
 from matplotlib import pyplot as plt
 from adaptive.environments import ODEEnv
 from adaptive.integrator import IntegratorODE, ClassicRungeKutta, RKDP
-from functions import Rotation, LorenzSystem, Pendulum
+from functions import Rotation, LorenzSystem, Pendulum, VanDerPol, HenonHeiles
 from adaptive.experience import ExperienceODE
 from adaptive.predictor import PredictorODE, PredictorQODE, PredictorConstODE, MetaQODE
 from adaptive.build_models import build_value_model, build_value_modelODE
@@ -73,38 +73,38 @@ def onefun():
     Integrate and plot one ODE (using PredictorODE) and print important statistics.
     """
     # step_sizes = [0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
-    step_sizes = [0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
+    step_sizes = [0.42, 0.44, 0.46, 0.48, 0.5, 0.52, 0.56, 0.6]
     dim_state = 6  # nodes per integration step
-    d = 3  # dimension of the ODE state space
+    d = 4  # dimension of the ODE state space
     dim_action = len(step_sizes)
     memory = 0  # how many integration steps the predictor can look back
-    x0 = np.array([10.0, 10.0, 10.0])
+    x0 = np.array([0, 0.5, 0, 0])
     # x0 = np.random.rand(3) * 20 - 10
     # print(x0)
 
     scaler = StandardScaler()
-    scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
-    scaler.mean_[0] = -0.045
-    scaler.scale_ = 10 * np.ones((dim_state * d + 1) * (memory + 1))
-    scaler.scale_[0] = 0.1
-
     # scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
-    # scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
+    # scaler.mean_[0] = -0.045
+    # scaler.scale_ = 10 * np.ones((dim_state * d + 1) * (memory + 1))
+    # scaler.scale_[0] = 0.1
 
-    env = ODEEnv(fun=LorenzSystem(), max_iterations=10000, initial_step_size=0.025,
+    scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
+    scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
+
+    env = ODEEnv(fun=HenonHeiles(), max_iterations=10000, initial_step_size=0.42,
                  step_size_range=(step_sizes[0], step_sizes[-1]),
-                 error_tol=0.0001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=100)
+                 error_tol=0.00001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=100)
 
     predictor = PredictorQODE(step_sizes=step_sizes,
                               model=build_value_modelODE(dim_state=dim_state * d + 1, dim_action=dim_action,
                                                          filename='predictorODE', lr=0.01, memory=memory),
                               scaler=scaler)
 
-    # predictor = PredictorConstODE(0.05)
+    # predictor = PredictorConstODE(0.6)  # 0.43 - 0.6
     # integrator = ClassicRungeKutta()
     integrator = RKDP()
 
-    reward, num_evals = integrate_env(predictor, integrator, env, t1=2, plot=True)
+    reward, num_evals = integrate_env(predictor, integrator, env, t1=100, plot=True)
 
     print("reward: {}".format(reward))
     print("nfev: {}".format(num_evals))
@@ -181,22 +181,28 @@ def pareto_model():
     """
     num_samples = 1
 
-    step_sizes = [0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
+    # step_sizes = [0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
+    step_sizes = [0.42, 0.44, 0.46, 0.48, 0.5, 0.52, 0.56, 0.6]
     dim_state = 6  # nodes per integration step
-    d = 3  # dimension of the ODE state space
+    d = 4  # dimension of the ODE state space
     dim_action = len(step_sizes)
     memory = 0  # how many integration steps the predictor can look back
-    x0 = np.array([10, 10, 10])
+    x0 = np.array([0, 0.5, 0, 0])
+    # x0 = np.random.rand(3) * 20 - 10
+    # print(x0)
 
     scaler = StandardScaler()
+    # scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
+    # scaler.mean_[0] = -0.045
+    # scaler.scale_ = 10 * np.ones((dim_state * d + 1) * (memory + 1))
+    # scaler.scale_[0] = 0.1
+
     scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
-    scaler.mean_[0] = -0.045
-    scaler.scale_ = 10 * np.ones((dim_state * d + 1) * (memory + 1))
-    scaler.scale_[0] = 0.1
+    scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
 
     t1 = 100
 
-    env = ODEEnv(fun=LorenzSystem(), max_iterations=10000, initial_step_size=0.025,
+    env = ODEEnv(fun=HenonHeiles(), max_iterations=10000, initial_step_size=0.42,
                  error_tol=0.0001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=t1)
 
     predictor = PredictorQODE(step_sizes=step_sizes,
@@ -287,11 +293,12 @@ def pareto_ode45():
     """
     num_samples = 1
     # f = LorenzSystem()
-    f = Pendulum(switchpoints=(0.05, 3.3))
-    x0 = np.array([1, 1])
+    # f = Pendulum(switchpoints=(0.05, 3.3))
+    f = HenonHeiles()
+    x0 = np.array([0, 0.5, 0, 0])
     t1 = 100
-    # tols = [1e-6, 5e-6, 1e-5, 2.5e-5, 5e-5, 1e-4, 5e-4]
-    tols = [7.8e-5]
+    tols = [1e-7, 5e-7, 1e-6, 5e-6, 1e-5, 5e-5]
+    # tols = [7.8e-5]
 
     paretos = []
     paretos_norep = []
@@ -343,8 +350,8 @@ def plot_pareto():
     pareto_ode_norepcount = np.load('pareto_ode45_norepcount.npy')
 
     fig = plt.figure(figsize=(5, 4), dpi=300)
-    plt.xlim((2e-5, 3e-4))
-    plt.ylim((115, 220))
+    # plt.xlim((2e-5, 3e-4))
+    # plt.ylim((115, 220))
 
     # plt.loglog(pareto_const[:, 0], pareto_const[:, 1], 'bx-', label='const')
     plt.loglog(pareto_mod[0], pareto_mod[1], 'r^', label='model')
@@ -361,9 +368,9 @@ def plot_pareto():
 
 
 if __name__ == '__main__':
-    # onefun()
+    onefun()
     # one_fun_meta()
     # pareto_model()
     # pareto_const_predictor()
-    pareto_ode45()
+    # pareto_ode45()
     # plot_pareto()
