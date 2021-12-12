@@ -8,7 +8,7 @@ from adaptive.experience import ExperienceODE
 from adaptive.predictor import PredictorQODE
 from adaptive.build_models import build_value_model, build_value_modelODE
 from adaptive.performance_tracker import PerformanceTrackerODE
-from joblib import dump, load
+from pickle import load
 from sklearn.preprocessing import StandardScaler
 
 
@@ -25,9 +25,8 @@ def main():
     # scale inputs of NN to have the order ~10^-1
     scaler = StandardScaler()
     scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))  # state = (h, k_1, ...)
-    # scaler.mean_[0] = 0.33
     scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
-    # scaler.scale_[0] = 0.1
+    # scaler = load(open("test_scaler.pkl", "rb"))
 
     env = ODEEnv(fun=HenonHeiles(), max_iterations=10000, initial_step_size=step_sizes[0],
                  step_size_range=(step_sizes[0], step_sizes[-1]),
