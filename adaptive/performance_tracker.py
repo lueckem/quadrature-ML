@@ -186,7 +186,7 @@ class PerformanceTrackerODE:
         if num_points > 0:
             x = x[-num_points:]
             y = y[-num_points:]
-        plt.scatter(x, y)
+        plt.scatter(x, y, c=(len(x) - 1) * ['b'] + ['g'])
         plt.yscale('log')
         plt.xscale('log')
         if len(self.errors) > 1:

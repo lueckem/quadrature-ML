@@ -175,6 +175,7 @@ class VelOscillator(Function):
         D ~ Unif(0,1)
         The function value is set to 1 outside of [low_bound, up_bound]
     """
+
     def __init__(self, low_bound=-1, up_bound=1):
         super().__init__()
 
@@ -318,7 +319,7 @@ class BrokenPolynomial(Function):
     def find_breakpoint(self):
         breakpt = 2
         for x0 in np.linspace(-1, 1, 11):
-            sol = root_scalar(lambda x: (self.derivative(x) - self.condition), x0=x0, x1=x0+0.01)
+            sol = root_scalar(lambda x: (self.derivative(x) - self.condition), x0=x0, x1=x0 + 0.01)
             if sol.converged:
                 if -1 < sol.root < 1:
                     breakpt = sol.root
@@ -482,6 +483,7 @@ class FunctionODE:
 
 class Rotation(FunctionODE):
     """ A rotation in 2 dimensions, i.e. f(t,x)=[[b a][-a b]] x """
+
     def __init__(self):
         super().__init__()
         self.A = self.choose_params()
@@ -790,6 +792,7 @@ class Pendulum(FunctionODE):
 
 class LorenzSystem(FunctionODE):
     """ Lorenz system"""
+
     def __init__(self, switchpoints=(-np.infty, np.infty), chaotic=True, delay=0.1):
         """
         Parameters
@@ -1029,6 +1032,85 @@ class VanDerPol(FunctionODE):
         return sol.t, sol.y.T
 
 
+class DoublePendulum(FunctionODE):
+    def __init__(self):
+        super().__init__()
+        self.m, self.le, self.g = self.choose_params()
+
+    @staticmethod
+    def choose_params():
+        m = (1, 1)  # mass
+        le = (1, 1)  # length
+        g = 10  # gravity
+        return m, le, g
+
+    def reset(self, reset_params=True):
+        self.evals = 0
+        if reset_params:
+            self.m, self.le, self.g = self.choose_params()
+
+    def __call__(self, t, x):
+        """
+        https://web.mit.edu/jorloff/www/chaosTalk/double-pendulum/double-pendulum-en.html
+
+        Parameters
+        ----------
+        t : float
+        x : np.ndarray
+            shape=(4,), (phi_1, dt phi_1, phi_2, dt phi_2)
+
+        Returns
+        -------
+        np.ndarray
+        """
+        self.evals += 1
+        out = np.zeros(4)
+        # out[0] = x[1]
+        # out[1] = -self.g * (2 * self.m[0] + self.m[1]) * np.sin(x[0]) - self.m[1] * self.g * np.sin(x[0] - 2 * x[2]) \
+        #          - 2 * np.sin(x[0] - x[2]) * self.m[1] * (x[3] ** 2 * self.le[1] + x[1] ** 2 * self.le[0]) * np.cos(x[0] - x[2])
+        # out[1] /= self.le[0] * (2 * self.m[0] + self.m[1] - self.m[1] * np.cos(2 * x[0] - 2 * x[2]))
+        # out[2] = x[3]
+        # out[3] = 2 * np.sin(x[0] - x[2]) * (x[1] ** 2 * self.le[0] * np.sum(self.m) + self.g * np.sum(self.m) * np.cos(x[0])
+        #                                     + x[3] ** 2 * self.le[1] * self.m[1] * np.cos(x[0] - x[2]))
+        # out[3] /= self.le[1] * (2 * self.m[0] + self.m[1] - self.m[1] * np.cos(2 * x[0] - 2 * x[2]))
+
+        s, c = np.sin(x[0] - x[2]), np.cos(x[0] - x[2])
+        out[0] = x[1]
+        out[1] = self.m[0] * self.g * np.sin(x[2]) * c - self.m[1] * s * (self.le[0] * x[1] ** 2 * c +
+                                                                          self.le[1] * x[3] ** 2) \
+                 - np.sum(self.m) * self.g * np.sin(x[0])
+        out[1] /= self.le[0] * (self.m[0] + self.m[1] * s ** 2)
+        out[2] = x[3]
+        out[3] = np.sum(self.m) * (self.le[0] * x[1] ** 2 * s - self.g * np.sin(x[2]) + self.g * np.sin(x[0]) * c) + \
+                 self.m[1] * self.le[1] * x[3] ** 2 * s * c
+        out[3] /= self.le[1] * (self.m[0] + self.m[1] * s ** 2)
+
+        return out
+
+    def solve(self, t_0, x_0, t_1, t_eval=None):
+        """
+        return solution x(t_1) of IVP x(t_0) = x_0
+
+        Parameters
+        ----------
+        t_0 : float
+        x_0 : np.ndarray
+        t_1 : float
+        t_eval : np.ndarray, optional
+            intermediate values at which the state x is calculated and returned
+
+        Returns
+        -------
+        np.ndarray
+        """
+        if t_eval is None:
+            sol = solve_ivp(self, (t_0, t_1), x_0, max_step=0.01)
+            return sol.y[:, -1]
+
+        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval, max_step=0.01)
+        return sol.t, sol.y.T
+
+
 def test_pendulum():
     switch = (0.05, 3.3)
     x0 = np.array([1, 1])
@@ -1226,4 +1308,3 @@ if __name__ == '__main__':
     #     print()
     #
     # plt.show()
-
