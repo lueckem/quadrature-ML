@@ -131,6 +131,9 @@ class PerformanceTrackerODE:
         self.num_evals = []
         self.rewards = []
 
+        # keep track of pareto optimal models
+        self.best_models = BestPredictors()
+
     def evaluate_performance(self, predictor, integrator):
         """
         Evaluate average performance of predictor on the saved test functions.
@@ -170,6 +173,7 @@ class PerformanceTrackerODE:
         self.errors.append(this_error)
         self.num_evals.append(this_num_evals)
         self.rewards.append(this_reward)
+        self.best_models.add_model(predictor, this_error, this_num_evals)
 
         return this_reward, this_error, this_num_evals
 
@@ -177,7 +181,7 @@ class PerformanceTrackerODE:
         plt.plot(self.rewards, 'b-x')
         plt.ylabel('reward per step')
         plt.grid()
-        plt.savefig('performance_track_rewards.png')
+        plt.savefig('performance_track_rewards.pdf')
         plt.close()
 
     def plot_pareto(self, num_points=0):
@@ -195,5 +199,45 @@ class PerformanceTrackerODE:
         plt.ylabel('num_steps')
         plt.tight_layout()
         plt.grid(which='both')
-        plt.savefig('performance_track_pareto.png', figsize=(6, 6), dpi=150)
+        plt.savefig('performance_track_pareto.pdf')
         plt.close()
+
+    def plot_best_models(self):
+        errors = np.array(self.best_models.errors)
+        n_evals = np.array(self.best_models.num_evals)
+        idx_sort = np.argsort(errors)
+        errors = errors[idx_sort]
+        n_evals = n_evals[idx_sort]
+        plt.plot(errors, n_evals, '--x')
+        plt.xlabel('error')
+        plt.ylabel('num_steps')
+        plt.grid()
+        plt.tight_layout()
+        plt.savefig('best_models.pdf')
+        plt.close()
+
+
+class BestPredictors:
+    def __init__(self):
+        self.models = []
+        self.errors = []
+        self.num_evals = []
+
+    def add_model(self, model, error, num_eval):
+        """
+        Parameters
+        ----------
+        model : PredictorODE
+        error : float
+        num_eval : float
+        """
+        if not self._is_dominated(error, num_eval):
+            self.models.append(model)
+            self.errors.append(error)
+            self.num_evals.append(num_eval)
+
+    def _is_dominated(self, error, num_eval):
+        for er, ev in zip(self.errors, self.num_evals):
+            if error >= er and num_eval >= ev:
+                return True
+        return False
