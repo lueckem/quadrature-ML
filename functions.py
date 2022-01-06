@@ -753,11 +753,11 @@ class Pendulum(FunctionODE):
         """
 
         if t_eval is None:
-            sol = solve_ivp(self, (t_0, t_1), x_0, max_step=0.1)
+            sol = solve_ivp(self, (t_0, t_1), x_0, max_step=0.1, rtol=1e-8)
             return sol.y[:, -1]
 
         t_out = np.concatenate(([t_0], t_eval, [t_1]))
-        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval)
+        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval, rtol=1e-8)
         return sol.t, sol.y.T
 
     def calc_switchtimes(self):
@@ -908,11 +908,11 @@ class LorenzSystem(FunctionODE):
         """
 
         if t_eval is None:
-            sol = solve_ivp(self, (t_0, t_1), x_0, atol=1e-8, rtol=1e-8)
+            sol = solve_ivp(self, (t_0, t_1), x_0, rtol=1e-8)
             return sol.y[:, -1]
 
         t_out = np.concatenate(([t_0], t_eval, [t_1]))
-        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval)
+        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval, rtol=1e-8)
         return sol.t, sol.y.T
 
 
@@ -967,10 +967,10 @@ class HenonHeiles(FunctionODE):
         """
 
         if t_eval is None:
-            sol = solve_ivp(self, (t_0, t_1), x_0)
+            sol = solve_ivp(self, (t_0, t_1), x_0, rtol=1e-8)
             return sol.y[:, -1]
 
-        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval)
+        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval, rtol=1e-8)
         return sol.t, sol.y.T
 
 
@@ -1025,10 +1025,10 @@ class VanDerPol(FunctionODE):
         np.ndarray
         """
         if t_eval is None:
-            sol = solve_ivp(self, (t_0, t_1), x_0)
+            sol = solve_ivp(self, (t_0, t_1), x_0, rtol=1e-8)
             return sol.y[:, -1]
 
-        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval)
+        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval, rtol=1e-8)
         return sol.t, sol.y.T
 
 
@@ -1065,14 +1065,6 @@ class DoublePendulum(FunctionODE):
         """
         self.evals += 1
         out = np.zeros(4)
-        # out[0] = x[1]
-        # out[1] = -self.g * (2 * self.m[0] + self.m[1]) * np.sin(x[0]) - self.m[1] * self.g * np.sin(x[0] - 2 * x[2]) \
-        #          - 2 * np.sin(x[0] - x[2]) * self.m[1] * (x[3] ** 2 * self.le[1] + x[1] ** 2 * self.le[0]) * np.cos(x[0] - x[2])
-        # out[1] /= self.le[0] * (2 * self.m[0] + self.m[1] - self.m[1] * np.cos(2 * x[0] - 2 * x[2]))
-        # out[2] = x[3]
-        # out[3] = 2 * np.sin(x[0] - x[2]) * (x[1] ** 2 * self.le[0] * np.sum(self.m) + self.g * np.sum(self.m) * np.cos(x[0])
-        #                                     + x[3] ** 2 * self.le[1] * self.m[1] * np.cos(x[0] - x[2]))
-        # out[3] /= self.le[1] * (2 * self.m[0] + self.m[1] - self.m[1] * np.cos(2 * x[0] - 2 * x[2]))
 
         s, c = np.sin(x[0] - x[2]), np.cos(x[0] - x[2])
         out[0] = x[1]
@@ -1104,11 +1096,22 @@ class DoublePendulum(FunctionODE):
         np.ndarray
         """
         if t_eval is None:
-            sol = solve_ivp(self, (t_0, t_1), x_0, max_step=0.01)
+            sol = solve_ivp(self, (t_0, t_1), x_0, max_step=0.01, rtol=1e-8)
             return sol.y[:, -1]
 
-        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval, max_step=0.01)
+        sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval, max_step=0.01, rtol=1e-8)
         return sol.t, sol.y.T
+
+    def calc_E(self, x):
+        """Return the total energy of the system."""
+        m1, m2 = self.m
+        L1, L2 = self.le
+        g = self.g
+        th1, th1d, th2, th2d = x.T
+        V = -(m1 + m2) * L1 * g * np.cos(th1) - m2 * L2 * g * np.cos(th2)
+        T = 0.5 * m1 * (L1 * th1d) ** 2 + 0.5 * m2 * ((L1 * th1d) ** 2 + (L2 * th2d) ** 2 +
+                                                      2 * L1 * L2 * th1d * th2d * np.cos(th1 - th2))
+        return T + V
 
 
 def test_pendulum():
