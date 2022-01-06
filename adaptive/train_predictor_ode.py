@@ -93,6 +93,8 @@ def main():
             perf_tracker.evaluate_performance(predictor, integrator)
             perf_tracker.plot()
             perf_tracker.plot_pareto(num_points=7)
+            perf_tracker.plot_best_models()
+            perf_tracker.best_models.save()
 
         # if episode % 20 == 0:
         #     env.plot(episode=episode, t_min=0, t_max=2)

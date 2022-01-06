@@ -4,6 +4,7 @@ from adaptive.environments import IntegrationEnv, ODEEnv
 from adaptive.predictor import Predictor, PredictorODE
 from adaptive.integrator import Integrator, IntegratorODE
 from matplotlib import pyplot as plt
+import joblib
 
 
 class PerformanceTracker:
@@ -163,7 +164,7 @@ class PerformanceTrackerODE:
                     break
 
             errors.append(np.mean(env.errors))
-            steps.append(env.evals)
+            steps.append(env.evals / (env.timesteps[-1] - env.timesteps[0]))
             reward_stepwise /= steps[-1]
             rewards.append(reward_stepwise)
 
@@ -173,7 +174,7 @@ class PerformanceTrackerODE:
         self.errors.append(this_error)
         self.num_evals.append(this_num_evals)
         self.rewards.append(this_reward)
-        self.best_models.add_model(predictor, this_error, this_num_evals)
+        self.best_models.add_model(predictor.model.get_weights(), this_error, this_num_evals, this_reward)
 
         return this_reward, this_error, this_num_evals
 
@@ -181,7 +182,7 @@ class PerformanceTrackerODE:
         plt.plot(self.rewards, 'b-x')
         plt.ylabel('reward per step')
         plt.grid()
-        plt.savefig('performance_track_rewards.pdf')
+        plt.savefig('performance_track_rewards.png')
         plt.close()
 
     def plot_pareto(self, num_points=0):
@@ -199,45 +200,90 @@ class PerformanceTrackerODE:
         plt.ylabel('num_steps')
         plt.tight_layout()
         plt.grid(which='both')
-        plt.savefig('performance_track_pareto.pdf')
+        plt.savefig('performance_track_pareto.png')
         plt.close()
 
     def plot_best_models(self):
-        errors = np.array(self.best_models.errors)
-        n_evals = np.array(self.best_models.num_evals)
-        idx_sort = np.argsort(errors)
-        errors = errors[idx_sort]
-        n_evals = n_evals[idx_sort]
-        plt.plot(errors, n_evals, '--x')
-        plt.xlabel('error')
-        plt.ylabel('num_steps')
+        errors = self.best_models.errors
+        n_evals = self.best_models.num_evals
+        rewards = self.best_models.rewards
+        plt.scatter(errors, n_evals, c=rewards, cmap=plt.get_cmap("cool"))
+        cbar = plt.colorbar()
+        cbar.set_label('reward')
+        plt.xlabel('error per step')
+        plt.ylabel('feval per time')
         plt.grid()
         plt.tight_layout()
-        plt.savefig('best_models.pdf')
+        plt.savefig('best_models.png')
         plt.close()
 
 
 class BestPredictors:
     def __init__(self):
-        self.models = []
+        self.weights = []
         self.errors = []
         self.num_evals = []
+        self.rewards = []
 
-    def add_model(self, model, error, num_eval):
+    def add_model(self, weights, error, num_eval, reward):
         """
         Parameters
         ----------
-        model : PredictorODE
+        weights : np.ndarray
         error : float
         num_eval : float
+        reward : float
         """
         if not self._is_dominated(error, num_eval):
-            self.models.append(model)
+
+            for i in reversed(range(len(self.errors))):
+                if self._dominates(error, num_eval, self.errors[i], self.num_evals[i]):
+                    self.errors.pop(i)
+                    self.num_evals.pop(i)
+                    self.weights.pop(i)
+                    self.rewards.pop(i)
+
+            self.weights.append(weights)
             self.errors.append(error)
             self.num_evals.append(num_eval)
+            self.rewards.append(reward)
 
     def _is_dominated(self, error, num_eval):
+        """
+        Returns
+        -------
+        bool
+            True, if (error, num_eval) is dominated by an existing point
+        """
         for er, ev in zip(self.errors, self.num_evals):
-            if error >= er and num_eval >= ev:
+            if self._dominates(er, ev, error, num_eval):
                 return True
         return False
+
+    @staticmethod
+    def _dominates(er1, nev1, er2, nev2):
+        if er2 >= er1 and nev2 >= nev1:
+            return True
+        return False
+
+    def save(self, filename=None):
+        if filename is None:
+            filename = "best_models.pkl"
+        joblib.dump(self.__dict__, open(filename, "wb"))
+
+    def load(self, filename=None):
+        if filename is None:
+            filename = "best_models.pkl"
+        loaded = joblib.load(open(filename, "rb"))
+        self.__dict__ = loaded
+        return self
+
+    def best_by_reward(self):
+        """
+        Returns
+        -------
+        np.ndarray
+            weights of model with the highest reward
+        """
+        idx = np.argmax(self.rewards)
+        return deepcopy(self.weights[idx])
