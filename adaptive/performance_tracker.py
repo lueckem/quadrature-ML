@@ -5,6 +5,7 @@ from adaptive.predictor import Predictor, PredictorODE
 from adaptive.integrator import Integrator, IntegratorODE
 from matplotlib import pyplot as plt
 import joblib
+from sklearn.linear_model import LinearRegression
 
 
 class PerformanceTracker:
@@ -106,7 +107,7 @@ class PerformanceTracker:
 
 
 class PerformanceTrackerODE:
-    def __init__(self, env, num_testfuns, t0, t1, integrator):
+    def __init__(self, env, num_testfuns, t0, t1, integrator, optimize_integrator=False):
         """
         Create num_testfuns copies of the IntegrationEnv env with different functions.
         The testfunctions will be integrated from t0 to t1 and the performance will be saved.
@@ -118,6 +119,8 @@ class PerformanceTrackerODE:
         t0 : float
         t1 : float
         integrator : IntegratorODE
+        optimize_integrator : bool, optional
+            If True, optimizes the integrator when evaluate_performance is called
         """
 
         self.t0 = t0
@@ -127,6 +130,7 @@ class PerformanceTrackerODE:
         # change the functions
         for e in self.envs:
             e.reset(reset_params=True, integrator=integrator)
+        self.integrator = deepcopy(integrator)
         # keep track of past errors and num_evals
         self.errors = []
         self.num_evals = []
@@ -135,14 +139,15 @@ class PerformanceTrackerODE:
         # keep track of pareto optimal models
         self.best_models = BestPredictors()
 
-    def evaluate_performance(self, predictor, integrator):
+        self.optimize_integrator = optimize_integrator
+
+    def evaluate_performance(self, predictor):
         """
         Evaluate average performance of predictor on the saved test functions.
 
         Parameters
         ----------
         predictor : PredictorODE
-        integrator : IntegratorODE
 
         Returns
         -------
@@ -152,13 +157,21 @@ class PerformanceTrackerODE:
         errors = []
         steps = []
         rewards = []
+
+        # for optimizing integrator
+        data_stateODE = []  # save history of StateODE (h, k1, ..., k6)
+        target = []  # save history of correct integrations
+
         for env in self.envs:
-            state = env.reset(reset_params=False, integrator=integrator)
+            state = env.reset(reset_params=False, integrator=self.integrator)
             env.t0 = self.t0
             reward_stepwise = 0
             while True:
+                node = env.nodes[-1]
                 action = predictor(state)
-                state, reward, _, _ = env.iterate(action, integrator)
+                state, reward, _, info = env.iterate(action, self.integrator)
+                data_stateODE.append(state[0])
+                target.append(info["correct_node"] - node)  # x_{n+1} - x_{n}
                 reward_stepwise += reward
                 if env.timesteps[-1] > self.t1:
                     break
@@ -174,7 +187,24 @@ class PerformanceTrackerODE:
         self.errors.append(this_error)
         self.num_evals.append(this_num_evals)
         self.rewards.append(this_reward)
-        self.best_models.add_model(predictor.model.get_weights(), this_error, this_num_evals, this_reward)
+        self.best_models.add_model(predictor.model.get_weights(), this_error, this_num_evals, this_reward,
+                                   self.integrator.b)
+
+        if self.optimize_integrator:
+            dim_state = 6
+            d = target[0].shape[0]
+            target = np.vstack(target)
+            data = np.zeros((len(data_stateODE), d, dim_state))
+            for i, s_ode in enumerate(data_stateODE):
+                k = s_ode.step_size * np.vstack(s_ode.f_evals)
+                data[i, :, :] = k.T
+
+            target = target.flatten()
+            data = data.reshape((data.shape[0] * d, -1))
+            model = LinearRegression(fit_intercept=False).fit(data, target)
+            print(f"old weights: {self.integrator.b}")
+            self.integrator.b = 0.95 * self.integrator.b + 0.05 * model.coef_
+            print(f"new weights: {self.integrator.b}")
 
         return this_reward, this_error, this_num_evals
 
@@ -224,8 +254,9 @@ class BestPredictors:
         self.errors = []
         self.num_evals = []
         self.rewards = []
+        self.weights_integrator = []
 
-    def add_model(self, weights, error, num_eval, reward):
+    def add_model(self, weights, error, num_eval, reward, weights_integrator):
         """
         Parameters
         ----------
@@ -233,6 +264,7 @@ class BestPredictors:
         error : float
         num_eval : float
         reward : float
+        weights_integrator : np.ndarray
         """
         if not self._is_dominated(error, num_eval):
 
@@ -242,11 +274,14 @@ class BestPredictors:
                     self.num_evals.pop(i)
                     self.weights.pop(i)
                     self.rewards.pop(i)
+                    self.weights_integrator.pop(i)
 
+            print(f"BestPredictor: Added model with (err, nfev) = ({error},{num_eval}).")
             self.weights.append(weights)
             self.errors.append(error)
             self.num_evals.append(num_eval)
             self.rewards.append(reward)
+            self.weights_integrator.append(weights_integrator)
 
     def _is_dominated(self, error, num_eval):
         """
@@ -287,3 +322,14 @@ class BestPredictors:
         """
         idx = np.argmax(self.rewards)
         return deepcopy(self.weights[idx])
+
+    def best_integrator_by_reward(self):
+        """
+        Returns
+        -------
+        np.ndarray
+            weights of integrator with the highest reward
+        """
+        idx = np.argmax(self.rewards)
+        return deepcopy(self.weights_integrator[idx])
+

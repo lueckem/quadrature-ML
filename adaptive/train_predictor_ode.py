@@ -10,6 +10,7 @@ from adaptive.build_models import build_value_model, build_value_modelODE
 from adaptive.performance_tracker import PerformanceTrackerODE
 from pickle import load
 from sklearn.preprocessing import StandardScaler
+from copy import deepcopy
 
 
 def main():
@@ -89,8 +90,9 @@ def main():
         print('reward: {}'.format(reward_total))
         print('loss_predictor: {}'.format(loss_this_episode))
 
-        if episode % 10 == 0:
-            perf_tracker.evaluate_performance(predictor, integrator)
+        if episode % 10 == 0 and episode > 0:
+            perf_tracker.evaluate_performance(predictor)
+            integrator = deepcopy(perf_tracker.integrator)
             perf_tracker.plot()
             perf_tracker.plot_pareto(num_points=7)
             perf_tracker.plot_best_models()
