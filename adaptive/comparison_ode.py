@@ -1,18 +1,21 @@
-import numpy as np
 import math
-from matplotlib import pyplot as plt
-from adaptive.environments import ODEEnv
-from adaptive.integrator import IntegratorODE, ClassicRungeKutta, RKDP
-from functions import Rotation, LorenzSystem, Pendulum, VanDerPol, HenonHeiles
-from adaptive.experience import ExperienceODE
-from adaptive.predictor import PredictorODE, PredictorQODE, PredictorConstODE, MetaQODE
-from adaptive.build_models import build_value_model, build_value_modelODE
-from adaptive.performance_tracker import PerformanceTrackerODE
-from joblib import dump, load
-from sklearn.preprocessing import StandardScaler
-from scipy.integrate import solve_ivp
 
+import numpy as np
+from joblib import dump, load
+from matplotlib import pyplot as plt
+from scipy.integrate import solve_ivp
+from sklearn.preprocessing import StandardScaler
+
+from adaptive.build_models import build_value_model, build_value_modelODE
+from adaptive.environments import ODEEnv
+from adaptive.experience import ExperienceODE
+from adaptive.integrator import RKDP, ClassicRungeKutta, IntegratorODE
+from adaptive.performance_tracker import PerformanceTrackerODE
+from adaptive.plots import plot_pareto
+from adaptive.predictor import (MetaQODE, PredictorConstODE, PredictorODE,
+                                PredictorQODE)
 from adaptive.train_metalearner import stepsize_to_idx
+from functions import HenonHeiles, LorenzSystem, Pendulum, Rotation, VanDerPol
 
 
 def integrate_env(predictor, integrator, env, t0=None, x0=None, t1=None, plot=False):
@@ -44,7 +47,7 @@ def integrate_env(predictor, integrator, env, t0=None, x0=None, t1=None, plot=Fa
         if env.max_dist < np.infty:
             t1 = env.t0 + env.max_dist
         else:
-            raise ValueError('Give value for t1!')
+            raise ValueError("Give value for t1!")
 
     state = env.reset(reset_params=False, integrator=integrator)
     reward = 0
@@ -91,14 +94,29 @@ def onefun():
     scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
     scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
 
-    env = ODEEnv(fun=HenonHeiles(), max_iterations=10000, initial_step_size=0.42,
-                 step_size_range=(step_sizes[0], step_sizes[-1]),
-                 error_tol=0.00001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=100)
+    env = ODEEnv(
+        fun=HenonHeiles(),
+        max_iterations=10000,
+        initial_step_size=0.42,
+        step_size_range=(step_sizes[0], step_sizes[-1]),
+        error_tol=0.00001,
+        nodes_per_integ=dim_state,
+        memory=memory,
+        x0=x0,
+        max_dist=100,
+    )
 
-    predictor = PredictorQODE(step_sizes=step_sizes,
-                              model=build_value_modelODE(dim_state=dim_state * d + 1, dim_action=dim_action,
-                                                         filename='predictorODE', lr=0.01, memory=memory),
-                              scaler=scaler)
+    predictor = PredictorQODE(
+        step_sizes=step_sizes,
+        model=build_value_modelODE(
+            dim_state=dim_state * d + 1,
+            dim_action=dim_action,
+            filename="predictorODE",
+            lr=0.01,
+            memory=memory,
+        ),
+        scaler=scaler,
+    )
 
     # predictor = PredictorConstODE(0.6)  # 0.43 - 0.6
     # integrator = ClassicRungeKutta()
@@ -109,7 +127,11 @@ def onefun():
     print("reward: {}".format(reward))
     print("nfev: {}".format(num_evals))
     print("mean error: {}".format(np.mean(env.errors)))
-    print("min error, max error: {}, {}".format(*np.round((np.min(env.errors), np.max(env.errors)), 5)))
+    print(
+        "min error, max error: {}, {}".format(
+            *np.round((np.min(env.errors), np.max(env.errors)), 5)
+        )
+    )
     print("min stepsize: {}".format(np.min(env.deltas)))
     print("max stepsize: {}".format(np.max(env.deltas)))
 
@@ -139,10 +161,18 @@ def one_fun_meta():
     scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
     scaler.scale_[0] = 0.1
 
-    basis_learners.append(PredictorQODE(step_sizes=step_sizes,
-                                        model=build_value_modelODE(dim_state=dim_state * d + 1, dim_action=dim_action,
-                                                                   filename='predictorODE', memory=memory),
-                                        scaler=scaler))
+    basis_learners.append(
+        PredictorQODE(
+            step_sizes=step_sizes,
+            model=build_value_modelODE(
+                dim_state=dim_state * d + 1,
+                dim_action=dim_action,
+                filename="predictorODE",
+                memory=memory,
+            ),
+            scaler=scaler,
+        )
+    )
     basis_learners.append(PredictorConstODE(0.1))
     basis_learners.append(PredictorConstODE(0.05))
     basis_learners.append(PredictorConstODE(0.01))
@@ -157,21 +187,37 @@ def one_fun_meta():
     scaler.scale_[0] = 0.1
 
     # define meta learner
-    metalearner = MetaQODE(basis_learners,
-                           model=build_value_modelODE(dim_state=dim_state * d + 1, dim_action=len(basis_learners),
-                                                      filename='metaODE', memory=memory, lr=0.001),
-                           scaler=scaler, use_idx=False)
+    metalearner = MetaQODE(
+        basis_learners,
+        model=build_value_modelODE(
+            dim_state=dim_state * d + 1,
+            dim_action=len(basis_learners),
+            filename="metaODE",
+            memory=memory,
+            lr=0.001,
+        ),
+        scaler=scaler,
+        use_idx=False,
+    )
 
     # define environment
-    env = ODEEnv(fun=Pendulum(switchpoints=(0.05, 3.3)), max_iterations=10000, initial_step_size=0.25,
-                 step_size_range=(0.005, 0.48),
-                 error_tol=0.00001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=100,
-                 stepsize_to_idx=stepsize_to_idx)
+    env = ODEEnv(
+        fun=Pendulum(switchpoints=(0.05, 3.3)),
+        max_iterations=10000,
+        initial_step_size=0.25,
+        step_size_range=(0.005, 0.48),
+        error_tol=0.00001,
+        nodes_per_integ=dim_state,
+        memory=memory,
+        x0=x0,
+        max_dist=100,
+        stepsize_to_idx=stepsize_to_idx,
+    )
     integrator = RKDP()
 
     reward, num_evals = integrate_env(metalearner, integrator, env, t1=t1, plot=True)
-    print('avg. error: {}'.format(np.mean(env.errors)))
-    print('evals: {}'.format(env.evals / t1))
+    print("avg. error: {}".format(np.mean(env.errors)))
+    print("evals: {}".format(env.evals / t1))
     print(env.fun.switch_times)
 
 
@@ -202,13 +248,28 @@ def pareto_model():
 
     t1 = 100
 
-    env = ODEEnv(fun=HenonHeiles(), max_iterations=10000, initial_step_size=0.42,
-                 error_tol=0.0001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=t1)
+    env = ODEEnv(
+        fun=HenonHeiles(),
+        max_iterations=10000,
+        initial_step_size=0.42,
+        error_tol=0.0001,
+        nodes_per_integ=dim_state,
+        memory=memory,
+        x0=x0,
+        max_dist=t1,
+    )
 
-    predictor = PredictorQODE(step_sizes=step_sizes,
-                              model=build_value_modelODE(dim_state=dim_state * d + 1, dim_action=dim_action,
-                                                         filename='predictorODE', lr=0.01, memory=memory),
-                              scaler=scaler)
+    predictor = PredictorQODE(
+        step_sizes=step_sizes,
+        model=build_value_modelODE(
+            dim_state=dim_state * d + 1,
+            dim_action=dim_action,
+            filename="predictorODE",
+            lr=0.01,
+            memory=memory,
+        ),
+        scaler=scaler,
+    )
 
     # predictor = PredictorConstODE(5)
     # integrator = ClassicRungeKutta()
@@ -232,7 +293,7 @@ def pareto_model():
     print(np.mean(errors))
     print(np.mean(t1s))
     print(np.quantile(errors, 0.9))
-    np.save('pareto_model.npy', np.array([np.mean(errors), np.mean(steps)]))
+    np.save("pareto_model.npy", np.array([np.mean(errors), np.mean(steps)]))
 
     # plt.hist(errors, 25)
     # plt.show()
@@ -259,13 +320,22 @@ def pareto_const_predictor():
     scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
     scaler.scale_ = np.ones((dim_state * d + 1) * (memory + 1))
 
-    env = ODEEnv(fun=Rotation(), max_iterations=10000, initial_step_size=0.6, step_size_range=step_sizes,
-                 error_tol=0.0001, nodes_per_integ=dim_state, memory=memory, x0=x0, max_dist=20)
+    env = ODEEnv(
+        fun=Rotation(),
+        max_iterations=10000,
+        initial_step_size=0.6,
+        step_size_range=step_sizes,
+        error_tol=0.0001,
+        nodes_per_integ=dim_state,
+        memory=memory,
+        x0=x0,
+        max_dist=20,
+    )
     integrator = RKDP()
 
     paretos = []
     for action in range(len(step_sizes)):
-        print('action: {}'.format(action))
+        print("action: {}".format(action))
         predictor = PredictorConstODE(action)
         errors = []
         steps = []
@@ -280,11 +350,11 @@ def pareto_const_predictor():
 
         print(np.mean(steps))
         print(np.mean(errors))
-        print('')
+        print("")
         paretos.append((np.mean(errors), np.mean(steps)))
 
     paretos = np.array(paretos)
-    np.save('pareto_const.npy', paretos)
+    np.save("pareto_const.npy", paretos)
 
 
 def pareto_ode45():
@@ -330,47 +400,37 @@ def pareto_ode45():
 
         print("error: {}".format(np.mean(errors)))
         print("fevals: {}".format(np.mean(fevals)))
-        print('fevals norej: {}'.format(np.mean(fevals_norep)))
-        print('')
+        print("fevals norej: {}".format(np.mean(fevals_norep)))
+        print("")
 
     paretos = np.array(paretos)
-    np.save('pareto_ode45.npy', paretos)
-    np.save('pareto_ode45_norepcount.npy', paretos_norep)
+    np.save("pareto_ode45.npy", paretos)
+    np.save("pareto_ode45_norepcount.npy", paretos_norep)
 
 
-def plot_pareto():
+def save_pareto_plot():
     """
     Plot performances (avg. error, avg. evals).
     """
-    # 0.0008868960659465355, 19.5
-    # pareto_const = np.load('pareto_const.npy')
-    pareto_mod = np.load('pareto_model.npy')
-    # pareto_mod = [1.3763545225205223e-05, 23.4]
-    pareto_ode = np.load('pareto_ode45.npy')
-    pareto_ode_norepcount = np.load('pareto_ode45_norepcount.npy')
+    pareto_mod = np.load("pareto_model.npy")
+    pareto_ode = np.load("pareto_ode45.npy")
+    pareto_ode_norepcount = np.load("pareto_ode45_norepcount.npy")
 
-    fig = plt.figure(figsize=(5, 4), dpi=300)
-    # plt.xlim((2e-5, 3e-4))
-    # plt.ylim((115, 220))
+    fig, ax = plot_pareto(
+        model_data=pareto_mod,
+        ode_data=pareto_ode,
+        ode_norep_data=pareto_ode_norepcount,
+        opt_model_data=None,  # TODO: add opt model data
+    )
 
-    # plt.loglog(pareto_const[:, 0], pareto_const[:, 1], 'bx-', label='const')
-    plt.loglog(pareto_mod[0], pareto_mod[1], 'r^', label='model')
-    plt.loglog(pareto_ode[:, 0], pareto_ode[:, 1], 'gx-', label='RK45')
-    plt.loglog(pareto_ode_norepcount[:, 0], pareto_ode_norepcount[:, 1], 'bx-', label='RK45 (rejections not counted)')
-
-    plt.legend()
-    plt.xlabel('error per RK step')
-    plt.ylabel('number of function eval.')
-    plt.grid(which='both')
-    plt.tight_layout()
-    plt.savefig('pareto.png')
+    fig.savefig("pareto.png", dpi=300)
     plt.show()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     onefun()
     # one_fun_meta()
     # pareto_model()
     # pareto_const_predictor()
     # pareto_ode45()
-    # plot_pareto()
+    # save_pareto_plot()
