@@ -14,7 +14,7 @@ def plot_pareto(
     opt_model_data: Optional[np.ndarray] = None,
     plot_scatter: bool = True,
     figsize: Tuple[float, float] = (2.559, 2.402),
-    scatter_alpha: float = 0.1,
+    scatter_alpha: float = 0.4,
     axislabelsize: Union[str, int] = "x-small",
     ticklabelsize: Union[str, int] = "xx-small",
     legend_fontsize: Union[str, int] = "xx-small",
@@ -81,8 +81,9 @@ def plot_pareto(
             model_data[:, 0],
             model_data[:, 1],
             color="tab:red",
-            marker=".",
+            marker="o",
             markeredgewidth=0,
+            markersize=int(0.75 * modelmarkersize),
             linestyle="None",
             alpha=scatter_alpha,
         )
@@ -105,8 +106,9 @@ def plot_pareto(
                 opt_model_data[:, 0],
                 opt_model_data[:, 1],
                 color="tab:purple",
-                marker=".",
+                marker="H",
                 markeredgewidth=0,
+                markersize=int(0.75 * modelmarkersize),
                 linestyle="None",
                 alpha=scatter_alpha,
             )
@@ -115,10 +117,10 @@ def plot_pareto(
             opt_mean[0],
             opt_mean[1],
             color="tab:purple",
-            marker="o",
+            marker="H",
             markersize=modelmarkersize,
             linestyle="None",
-            label="Optimized",
+            label="Model (optim. weights)",
         )
 
     # Plot the ODE data
@@ -145,8 +147,8 @@ def plot_pareto(
         ncol=legend_ncol,
         columnspacing=0,
     )
-    ax.set_xlabel("Error per RK step", fontsize=axislabelsize)
-    ax.set_ylabel("Number of function eval.", fontsize=axislabelsize)
+    ax.set_xlabel("error per RK step", fontsize=axislabelsize)
+    ax.set_ylabel("$f$ evaluations per time", fontsize=axislabelsize)
     ax.grid(which="both")
     ax.tick_params(labelsize=ticklabelsize, which="both")
     plt.setp(ax.get_xminorticklabels(), visible=False)
@@ -158,8 +160,8 @@ def plot_pareto(
         ax.set_ylim(*yrange)
 
     # Adjust margins:
-    left_in = 0.41
-    right_in = 0.1
+    left_in = 0.42
+    right_in = 0.08
     bottom_in = 0.35
     top_in = 0.05
     plt.subplots_adjust(
@@ -256,7 +258,7 @@ def plot_trajectory(
     fig, ax = plt.subplots(dim + 2, figsize=figsize, sharex=True)
 
     # Plot the trajectory:
-    color = "tab:blue"
+    color = "k"
     for i in range(dim):
         ax[i].plot(
             times_to_plot,
@@ -290,8 +292,9 @@ def plot_trajectory(
     ax[dim + 1].plot(
         times_duplicates, deltas, color=color, linewidth=linewidth, marker=marker
     )
-    ax[dim + 1].set_ylabel("step size", color=color, fontsize=axislabelsize)
+    ax[dim + 1].set_ylabel("$h$", color=color, fontsize=axislabelsize)
     ax[dim + 1].grid(linewidth=axislinewidth)
+    ax[dim + 1].set_xlabel("time", color="k", fontsize=axislabelsize)
 
     for a in ax:
         a.tick_params(axis="both", which="major", labelsize=ticklabelsize)
@@ -301,9 +304,9 @@ def plot_trajectory(
     fig.align_labels()
 
     # Adjust margins:
-    left_in = 0.5
+    left_in = 0.52
     right_in = 0.01
-    bottom_in = 0.2
+    bottom_in = 0.33
     top_in = 0.01
     hspace_in = 0.3
     plt.subplots_adjust(
