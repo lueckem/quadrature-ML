@@ -4,7 +4,174 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
 
-__all__ = ["plot_trajectory"]
+__all__ = ["plot_pareto", "plot_trajectory"]
+
+
+def plot_pareto(
+    model_data: np.ndarray,
+    ode_data: np.ndarray,
+    ode_norep_data: np.ndarray,
+    opt_model_data: Optional[np.ndarray] = None,
+    plot_scatter: bool = True,
+    figsize: Tuple[float, float] = (2.559, 2.402),
+    scatter_alpha: float = 0.4,
+    axislabelsize: Union[str, int] = "x-small",
+    ticklabelsize: Union[str, int] = "xx-small",
+    legend_fontsize: Union[str, int] = "xx-small",
+    modelmarkersize: float = 5,
+    xrange: Optional[Tuple[float, float]] = None,
+    yrange: Optional[Tuple[float, float]] = None,
+    legend_ncol: int = 1,
+) -> Tuple[plt.Figure, plt.Axes]:
+    """Plot the Pareto front of the model and the ODE data.
+
+    Parameters
+    ----------
+    model_data : np.ndarray (2,) or (n_traj, 2)
+        Array containing error and number of function evals. If the results for multiple
+        trajectories are provided, a scatter plot will be plotted in addition to the
+        mean point if plot_scatter is True.
+    ode_data : np.ndarray (n_tol, 2)
+        Array containing the errors and numbers of function evals for RK45 evaluated
+        on different tolerances.
+    ode_norep_data : np.ndarray (n_tol, 2)
+        Same as ode_data, but rejections were not counted.
+    opt_model_data : np.ndarray (2,) or (n_traj, 2)
+        Array containing the error and number of function evals for the model with
+        optimized weights. If the results for multiple trajectories are provided, a
+        scatter plot will be plotted in addition to the mean point if plot_scatter is
+        True.
+    plot_scatter : bool
+        If True, scatter plots will be plotted in addition to the mean points.
+    figsize : Tuple[float, float]
+        Size of the figure in inches.
+    scatter_alpha : float (default: 0.1)
+        Transparency of the points of the scatter plot.
+    axislabelsize : Union[str, int]
+        Size of the axis labels.
+    ticklabelsize : Union[str, int]
+        Size of the tick labels.
+    legend_fontsize : Union[str, int]
+        Size of the font in the legend.
+    modelmarkersize : float (default: 5)
+        Size of the markers depicting the mean point of the models.
+    xrange : Tuple[float, float]
+        Range of the x-axis. If None, the range will be determined automatically.
+    yrange : Tuple[float, float]
+        Range of the y-axis. If None, the range will be determined automatically.
+    legend_ncol : int (default: 1)
+        Number of columns in the legend.
+
+    Returns
+    -------
+    fig : plt.Figure
+        Figure containing the plot.
+    ax : plt.Axes
+        Axes object containing the plot.
+
+    """
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot the model data
+    # If the model data contains more than one row, plot all rows as small scatter plot
+    # and the mean a bit more pronounced:
+    model_data = np.atleast_2d(model_data)
+    if model_data.shape[0] > 1 and plot_scatter:
+        ax.loglog(
+            model_data[:, 0],
+            model_data[:, 1],
+            color="tab:red",
+            marker="o",
+            markeredgewidth=0,
+            markersize=int(0.75 * modelmarkersize),
+            linestyle="None",
+            alpha=scatter_alpha,
+        )
+    mean = np.mean(model_data, axis=0)
+    ax.loglog(
+        mean[0],
+        mean[1],
+        color="tab:red",
+        marker="o",
+        markersize=modelmarkersize,
+        linestyle="None",
+        label="Model",
+    )
+
+    # Plot the optimized model data:
+    if opt_model_data is not None:
+        opt_model_data = np.atleast_2d(opt_model_data)
+        if model_data.shape[0] > 1 and plot_scatter:
+            ax.loglog(
+                opt_model_data[:, 0],
+                opt_model_data[:, 1],
+                color="tab:purple",
+                marker="H",
+                markeredgewidth=0,
+                markersize=int(0.75 * modelmarkersize),
+                linestyle="None",
+                alpha=scatter_alpha,
+            )
+        opt_mean = np.mean(opt_model_data, axis=0)
+        ax.loglog(
+            opt_mean[0],
+            opt_mean[1],
+            color="tab:purple",
+            marker="H",
+            markersize=modelmarkersize,
+            linestyle="None",
+            label="Model (optim. weights)",
+        )
+
+    # Plot the ODE data
+    ax.loglog(
+        ode_data[:, 0],
+        ode_data[:, 1],
+        color="tab:green",
+        marker="x",
+        label="RK45",
+    )
+    ax.loglog(
+        ode_norep_data[:, 0],
+        ode_norep_data[:, 1],
+        color="tab:blue",
+        marker="x",
+        label="RK45 (rej. not counted)",
+    )
+
+    ax.legend(
+        loc="best",
+        fontsize=legend_fontsize,
+        markerfirst=False,
+        framealpha=0.6,
+        ncol=legend_ncol,
+        columnspacing=0,
+    )
+    ax.set_xlabel("error per RK step", fontsize=axislabelsize)
+    ax.set_ylabel("$f$ evaluations per time", fontsize=axislabelsize)
+    ax.grid(which="both")
+    ax.tick_params(labelsize=ticklabelsize, which="both")
+    plt.setp(ax.get_xminorticklabels(), visible=False)
+    plt.setp(ax.get_yminorticklabels(), visible=False)
+
+    if xrange is not None:
+        ax.set_xlim(*xrange)
+    if yrange is not None:
+        ax.set_ylim(*yrange)
+
+    # Adjust margins:
+    left_in = 0.42
+    right_in = 0.08
+    bottom_in = 0.35
+    top_in = 0.05
+    plt.subplots_adjust(
+        left=left_in / figsize[0],
+        right=1.0 - right_in / figsize[0],
+        bottom=bottom_in / figsize[1],
+        top=1.0 - top_in / figsize[1],
+    )
+
+    return fig, ax
 
 
 def plot_trajectory(
@@ -91,7 +258,7 @@ def plot_trajectory(
     fig, ax = plt.subplots(dim + 2, figsize=figsize, sharex=True)
 
     # Plot the trajectory:
-    color = "tab:blue"
+    color = "k"
     for i in range(dim):
         ax[i].plot(
             times_to_plot,
@@ -125,8 +292,9 @@ def plot_trajectory(
     ax[dim + 1].plot(
         times_duplicates, deltas, color=color, linewidth=linewidth, marker=marker
     )
-    ax[dim + 1].set_ylabel("step size", color=color, fontsize=axislabelsize)
+    ax[dim + 1].set_ylabel("$h$", color=color, fontsize=axislabelsize)
     ax[dim + 1].grid(linewidth=axislinewidth)
+    ax[dim + 1].set_xlabel("time", color="k", fontsize=axislabelsize)
 
     for a in ax:
         a.tick_params(axis="both", which="major", labelsize=ticklabelsize)
@@ -136,9 +304,9 @@ def plot_trajectory(
     fig.align_labels()
 
     # Adjust margins:
-    left_in = 0.5
+    left_in = 0.52
     right_in = 0.01
-    bottom_in = 0.2
+    bottom_in = 0.33
     top_in = 0.01
     hspace_in = 0.3
     plt.subplots_adjust(
