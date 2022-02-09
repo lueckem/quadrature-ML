@@ -1,18 +1,31 @@
+import math
 from copy import deepcopy
+from typing import Optional
 
 import numpy as np
-import math
 from matplotlib import pyplot as plt
-from functions import Function, FunctionODE
-from adaptive.integrator import Integrator, Simpson, IntegratorODE, StateODE
+
 from adaptive.error_estimator import Estimator
+from adaptive.integrator import Integrator, IntegratorODE, Simpson, StateODE
+from adaptive.plots import plot_trajectory
 from adaptive.reward_functions import Reward, RewardExp, RewardLog10
+from functions import Function, FunctionODE
 
 
 class IntegrationEnv:
-    def __init__(self, fun, max_iterations, initial_step_size, error_tol,
-                 x0=0.0, step_size_range=(0.01, 1), max_dist=np.infty, nodes_per_integ=3, memory=0,
-                 reward_fun=None):
+    def __init__(
+        self,
+        fun,
+        max_iterations,
+        initial_step_size,
+        error_tol,
+        x0=0.0,
+        step_size_range=(0.01, 1),
+        max_dist=np.infty,
+        nodes_per_integ=3,
+        memory=0,
+        reward_fun=None,
+    ):
         """
         Parameters
         ----------
@@ -49,7 +62,9 @@ class IntegrationEnv:
         self.memory_states = []
 
         self.current_iteration = 0
-        self._nodes = []  # contains copies of boundary nodes, for unique nodes use self.nodes
+        self._nodes = (
+            []
+        )  # contains copies of boundary nodes, for unique nodes use self.nodes
         self.errors = []
         self.deltas = []
         self.reps = 0  # counter to keep track of repititions
@@ -84,37 +99,58 @@ class IntegrationEnv:
         self.reps = 0
 
         # calculate nodes and error for first initialization step
-        self._nodes = [self.x0 + k * self.initial_step_size for k in range(self.nodes_per_integ)]
+        self._nodes = [
+            self.x0 + k * self.initial_step_size for k in range(self.nodes_per_integ)
+        ]
         self.errors = []
         if integrator is None:
             self.errors.append(0)
         else:
-            integ = integrator(np.array([self.initial_step_size] + self._calc_shifted_funvals(self._nodes)),
-                               self.fun(self.x0))
+            integ = integrator(
+                np.array(
+                    [self.initial_step_size] + self._calc_shifted_funvals(self._nodes)
+                ),
+                self.fun(self.x0),
+            )
             correct_integ = self.fun.integral(self._nodes[0], self._nodes[-1])
             self.errors.append(abs(integ - correct_integ))
 
         # calculate nodes and error for further initialization steps (if memory is > 0)
         for i in range(self.memory):
-            new_nodes = [self._nodes[-1] + k * self.initial_step_size for k in range(self.nodes_per_integ)]
+            new_nodes = [
+                self._nodes[-1] + k * self.initial_step_size
+                for k in range(self.nodes_per_integ)
+            ]
             self._nodes.extend(new_nodes)
 
             if integrator is None:
                 self.errors.append(0)
             else:
-                integ = integrator(np.array([self.initial_step_size] + self._calc_shifted_funvals(new_nodes)),
-                                   self.fun(new_nodes[0]))
+                integ = integrator(
+                    np.array(
+                        [self.initial_step_size] + self._calc_shifted_funvals(new_nodes)
+                    ),
+                    self.fun(new_nodes[0]),
+                )
                 correct_integ = self.fun.integral(new_nodes[0], new_nodes[-1])
                 self.errors.append(abs(integ - correct_integ))
 
         self.deltas = [self.initial_step_size] * (self.memory + 1)
 
-        next_state = [self.initial_step_size] + self._calc_shifted_funvals(self._nodes[-self.nodes_per_integ:])
+        next_state = [self.initial_step_size] + self._calc_shifted_funvals(
+            self._nodes[-self.nodes_per_integ :]
+        )
         self.memory_states = []
         for i in range(self.memory):
-            self.memory_states.append([self.initial_step_size] + self._calc_shifted_funvals(
-                self._nodes[-(self.nodes_per_integ - 1) * (i + 2) - 1: -(self.nodes_per_integ - 1) * (i + 1)]
-            ))
+            self.memory_states.append(
+                [self.initial_step_size]
+                + self._calc_shifted_funvals(
+                    self._nodes[
+                        -(self.nodes_per_integ - 1) * (i + 2)
+                        - 1 : -(self.nodes_per_integ - 1) * (i + 1)
+                    ]
+                )
+            )
         next_state_mem = deepcopy(next_state)
         for s in self.memory_states:
             next_state_mem.extend(s)
@@ -122,7 +158,7 @@ class IntegrationEnv:
         self.memory_states.insert(0, next_state)
         self.memory_states.pop()
 
-        return np.asarray(next_state_mem, dtype='float32')
+        return np.asarray(next_state_mem, dtype="float32")
 
     def iterate(self, step_size, integrator, estimator=None):
         """
@@ -172,8 +208,10 @@ class IntegrationEnv:
         b = next_nodes[-1]
         correct_integral = self.fun.integral(a, b)
         info["correct_integral"] = correct_integral
-        info["correct_integral_shifted"] = correct_integral - self.fun(a) * (self.nodes_per_integ - 1) * step_size
-        integral = integrator(np.asarray(next_state, dtype='float32'), self.fun(a))
+        info["correct_integral_shifted"] = (
+            correct_integral - self.fun(a) * (self.nodes_per_integ - 1) * step_size
+        )
+        integral = integrator(np.asarray(next_state, dtype="float32"), self.fun(a))
         error = abs(correct_integral - integral)
         info["exact_error"] = error
         info["f_a"] = self.fun(a)
@@ -190,9 +228,12 @@ class IntegrationEnv:
         self.memory_states.insert(0, next_state)
         self.memory_states.pop()
 
-        next_state_mem = np.asarray(next_state_mem, dtype='float32')
+        next_state_mem = np.asarray(next_state_mem, dtype="float32")
         self.current_iteration += 1
-        if self.current_iteration >= self.max_iterations or b >= self.x0 + self.max_dist:
+        if (
+            self.current_iteration >= self.max_iterations
+            or b >= self.x0 + self.max_dist
+        ):
             done = True
         else:
             done = False
@@ -225,7 +266,7 @@ class IntegrationEnv:
         else:
             id_max = len(self._nodes)
 
-        nodes_to_plot = self._nodes[id_min:id_max + 1]
+        nodes_to_plot = self._nodes[id_min : id_max + 1]
         nodes_to_plot_unique = np.unique(nodes_to_plot)
         num_steps = math.ceil((x_max - x_min) / (self.initial_step_size / 8.0))
         x = np.linspace(nodes_to_plot[0], nodes_to_plot[-1], num_steps)
@@ -233,37 +274,42 @@ class IntegrationEnv:
         y_nodes = [self.fun(num) for num in nodes_to_plot_unique]
 
         errors = [val for val in self.errors for _ in range(self.nodes_per_integ)]
-        errors = errors[id_min:id_max + 1]
+        errors = errors[id_min : id_max + 1]
         deltas = [val for val in self.deltas for _ in range(self.nodes_per_integ)]
-        deltas = deltas[id_min:id_max + 1]
+        deltas = deltas[id_min : id_max + 1]
 
         # plt.rcParams.update({'font.size': 14})
         # fig, axs = plt.subplots(3, sharex=True, figsize=(7, 6), dpi=300)
         fig, axs = plt.subplots(3, sharex=True)
-        color = 'tab:blue'
-        axs[0].set_xlabel('x', color='k')
-        axs[0].set_ylabel('f(x)', color=color)
+        color = "tab:blue"
+        axs[0].set_xlabel("x", color="k")
+        axs[0].set_ylabel("f(x)", color=color)
         axs[0].plot(x, y, color=color)
-        axs[0].tick_params(axis='y', labelcolor='k')
-        color = 'tab:green'
-        axs[0].plot(nodes_to_plot_unique, y_nodes, 'x', color=color)
-        axs[0].plot(nodes_to_plot_unique, np.zeros((len(nodes_to_plot_unique),)), '|', color=color)
+        axs[0].tick_params(axis="y", labelcolor="k")
+        color = "tab:green"
+        axs[0].plot(nodes_to_plot_unique, y_nodes, "x", color=color)
+        axs[0].plot(
+            nodes_to_plot_unique,
+            np.zeros((len(nodes_to_plot_unique),)),
+            "|",
+            color=color,
+        )
         axs[0].grid()
 
-        color = 'tab:red'
-        axs[1].set_ylabel('error', color=color)
-        axs[1].plot(nodes_to_plot, errors, 'x-', color=color)
-        axs[1].plot(nodes_to_plot, self.error_tol * np.ones(len(nodes_to_plot)), 'k-')
+        color = "tab:red"
+        axs[1].set_ylabel("error", color=color)
+        axs[1].plot(nodes_to_plot, errors, "x-", color=color)
+        axs[1].plot(nodes_to_plot, self.error_tol * np.ones(len(nodes_to_plot)), "k-")
         axs[1].grid()
 
-        color = 'tab:blue'
-        axs[2].set_ylabel('step size', color=color)
-        axs[2].plot(nodes_to_plot, deltas, 'x-', color=color)
+        color = "tab:blue"
+        axs[2].set_ylabel("step size", color=color)
+        axs[2].plot(nodes_to_plot, deltas, "x-", color=color)
         axs[2].grid()
 
         fig.tight_layout()
         if save:
-            plt.savefig('adapt_{}.png'.format(episode))
+            plt.savefig("adapt_{}.png".format(episode))
         if show:
             plt.show()
         plt.close()
@@ -282,10 +328,14 @@ class IntegrationEnv:
             samples, shape (num_samples, self.nodes_per_integ * (memory + 1)
         """
         samples = np.zeros((num_samples, self.nodes_per_integ))
-        samples[:, 0] = (self.step_size_range[1] - self.step_size_range[0]) * np.random.sample(num_samples)\
-                        + self.step_size_range[0]
+        samples[:, 0] = (
+            self.step_size_range[1] - self.step_size_range[0]
+        ) * np.random.sample(num_samples) + self.step_size_range[0]
         max_dif = self.fun.maximum() - self.fun.minimum()
-        samples[:, 1:] = 2 * max_dif * np.random.sample((num_samples, self.nodes_per_integ - 1)) - max_dif
+        samples[:, 1:] = (
+            2 * max_dif * np.random.sample((num_samples, self.nodes_per_integ - 1))
+            - max_dif
+        )
         samples = np.tile(samples, (1, self.memory + 1))
         print(samples.shape)
         return samples
@@ -314,8 +364,21 @@ class IntegrationEnv:
 
 
 class ODEEnv:
-    def __init__(self, fun, max_iterations, initial_step_size, error_tol, x0, t0=0, step_size_range=(0.01, 10),
-                 max_dist=np.infty, nodes_per_integ=4, memory=0, reward_fun=None, stepsize_to_idx=None):
+    def __init__(
+        self,
+        fun,
+        max_iterations,
+        initial_step_size,
+        error_tol,
+        x0,
+        t0=0,
+        step_size_range=(0.01, 10),
+        max_dist=np.infty,
+        nodes_per_integ=4,
+        memory=0,
+        reward_fun=None,
+        stepsize_to_idx=None,
+    ):
         """
         Parameters
         ----------
@@ -479,87 +542,59 @@ class ODEEnv:
         self.memory_states.pop()
 
         self.current_iteration += 1
-        if self.current_iteration >= self.max_iterations or next_time >= self.t0 + self.max_dist:
+        if (
+            self.current_iteration >= self.max_iterations
+            or next_time >= self.t0 + self.max_dist
+        ):
             done = True
         else:
             done = False
 
         return self.memory_states.copy(), reward, done, info
 
-    def plot(self, t_min=None, t_max=None, episode=0, show=True, save=False):
-        """
-        plot the first 2 dimensions of x, the errors, and the step_sizes against the time
+    def plot(
+        self,
+        t_min: Optional[float] = None,
+        t_max: Optional[float] = None,
+        episode: int = 0,
+        show: bool = True,
+        save: bool = False,
+    ):
+        """Plot the first 2 dimensions of x, the errors, and the step_sizes against time
 
         Parameters
         ----------
-        t_min : float
-            left bound of x-axis
+        t_min : float, optional
+            Left bound of x-axis. If None, the left bound is set to the first timestep.
         t_max : float
-            right bound of x-axis
+            Right bound of x-axis. If None, the right bound is set to the last timestep.
         episode : int
-            for labeling the file
+            Index of the episode to plot. Will be used for the filename if save is True.
+        show : bool
+            If True, the plot will be shown.
+        save : bool
+            If True, the plot will be saved to a file.
         """
 
-        if t_min is None:
-            id_min = 0
-            t_min = self.timesteps[0]
-        else:
-            id_min = next(i for i, t in enumerate(self.timesteps) if t >= t_min)
+        fig, ax = plot_trajectory(
+            x0=self.x0,
+            timesteps=self.timesteps,
+            nodes=self.nodes,
+            errors=self.errors,
+            deltas=self.deltas,
+            t_min=t_min,
+            t_max=t_max,
+            error_tolerance=self.error_tol,
+        )
 
-        if t_max is None:
-            id_max = len(self.timesteps) - 1
-            t_max = self.timesteps[-1]
-        elif t_max < self.timesteps[-1]:
-            id_max = next(i for i, t in enumerate(self.timesteps) if t > t_max) - 1
-        else:
-            id_max = len(self.timesteps) - 1
-
-        times_to_plot = self.timesteps[id_min:id_max + 1]
-        nodes_to_plot = np.array(self.nodes[id_min:id_max + 1])
-
-        # num_steps = math.ceil((t_max - t_min) / (self.initial_step_size / 8.0))
-        # t = np.linspace(times_to_plot[0], times_to_plot[-1], num_steps)
-        # if id_min == 0:
-        #     t, x = self.fun.solve(self.t0, self.x0, t[-1], t_eval=t[1:-1])
-        # else:
-        #     t, x = self.fun.solve(self.t0, self.x0, t[-1], t_eval=t[:-1])
-
-        errors = self.errors[id_min:id_max]
-        errors = [val for val in errors for _ in range(2)]
-
-        deltas = self.deltas[id_min:id_max]
-        deltas = [val for val in deltas for _ in range(2)]
-
-        times_duplicates = [times_to_plot[0]] + [val for val in times_to_plot[1:-1] for _ in range(2)] +\
-                           [times_to_plot[-1]]
-
-        dim = self.x0.shape[0]
-        fig, axs = plt.subplots(dim + 2, sharex=True)
-        color = 'tab:blue'
-        for i in range(dim):
-            axs[i].set_ylabel(r'$x_{}$'.format(i + 1), color=color)
-            axs[i].plot(times_to_plot, nodes_to_plot[:, i], '-x', color=color)
-            axs[i].grid()
-
-        color = 'tab:red'
-        axs[dim].set_ylabel('error', color=color)
-        axs[dim].plot(times_duplicates, errors, 'x-', color=color)
-        axs[dim].plot(times_duplicates, self.error_tol * np.ones(len(times_duplicates)), 'k-')
-        axs[dim].grid()
-
-        color = 'tab:blue'
-        axs[dim + 1].set_ylabel('step size', color=color)
-        axs[dim + 1].plot(times_duplicates, deltas, 'x-', color=color)
-        axs[dim + 1].grid()
-
-        fig.tight_layout()
-        plt.subplots_adjust(hspace=0.2)
         if save:
-            plt.savefig('adapt_{}.png'.format(episode))
+            fig.savefig("adapt_{}.png".format(episode))
         if show:
             plt.show()
         plt.close()
 
     @property
     def evals(self):
-        return (len(self.nodes) - 1) * self.nodes_per_integ + self.nodes_per_integ * self.reps
+        return (
+            len(self.nodes) - 1
+        ) * self.nodes_per_integ + self.nodes_per_integ * self.reps
