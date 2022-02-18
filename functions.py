@@ -1,9 +1,10 @@
 import numpy as np
-from math import sin, cos, pi, exp, erf
+from math import sin, cos, pi, exp
+from scipy.special import erf
 from scipy.optimize import root_scalar
 from scipy.integrate import quad, solve_ivp
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Kernel
+from sklearn.gaussian_process.kernels import Kernel, Matern, RBF
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -217,31 +218,32 @@ class VelOscillator(Function):
 
 
 class Pulse(Function):
-    """ f(x) = e^(-a * (x - b)^2), a > 0"""
+    """ f(x) = c * e^(-a * (x - b)^2), a > 0"""
 
     def __init__(self):
         super().__init__()
-        self.a, self.b = self.choose_params()
+        self.a, self.b, self.c = self.choose_params()
 
     def reset(self, reset_params=True):
         """ parameters are chosen """
         self.evals = 0
         if reset_params:
-            self.a, self.b = self.choose_params()
+            self.a, self.b, self.c = self.choose_params()
 
     @staticmethod
     def choose_params():
-        a = 5 * np.random.sample() + 0.5
-        b = 2 * np.random.sample() + 4
-        return a, b
+        a = (6000 * np.random.sample() - 3000) + 10000
+        b = 6 * np.random.sample() + 2
+        c = (6000 * np.random.sample() - 3000) + 10000
+        return a, b, c
 
     def __call__(self, x):
         self.evals += 1
-        return exp(-self.a * (x - self.b) ** 2)
+        return self.c * exp(-self.a * (x - self.b) ** 2)
 
     def antiderivative(self, x):
         """ return the antiderivative at x """
-        return -(pi ** 0.5 * erf(self.a ** 0.5 * (self.b - x))) / (2 * self.a ** 0.5)
+        return self.c * -(pi ** 0.5 * erf(self.a ** 0.5 * (self.b - x))) / (2 * self.a ** 0.5)
 
     @staticmethod
     def maximum():
@@ -444,6 +446,8 @@ class GPRealization(Function):
         """
         super().__init__()
         # RBF(length_scale_bounds=(0.3, 10.0))
+        kernel = Matern(length_scale=1)
+        kernel = RBF(length_scale=0.1)
         self.gp = GaussianProcessRegressor(kernel=kernel)
 
         x = np.linspace(x0, x1, num_init)
@@ -464,6 +468,31 @@ class GPRealization(Function):
     def integral(self, x_0=0, x_1=1):
         """ return the integral from x_0 to x_1 """
         return quad(self, x_0, x_1)[0]
+
+
+class DoublePendulumInteg(Function):
+    def __init__(self, x0, x1):
+        super().__init__()
+        self.x0, self.x1 = x0, x1
+        y_init = DoublePendulum().sample_initial_x(energy=20)
+        sol = solve_ivp(DoublePendulum(), (x0, x1), y_init, atol=1e-6, rtol=1e-8, dense_output=True)
+        self.traj = sol.sol
+
+    def reset(self, reset_params=True):
+        """ parameters are chosen """
+        self.evals = 0
+        if reset_params:
+            y_init = DoublePendulum().sample_initial_x(energy=20)
+            sol = solve_ivp(DoublePendulum(), (self.x0, self.x1), y_init, atol=1e-6, rtol=1e-8, dense_output=True)
+            self.traj = sol.sol
+
+    def __call__(self, x):
+        return self.traj(x)[1]
+
+    def integral(self, x_0=0, x_1=1):
+        """ return the integral from x_0 to x_1 """
+        limit = max(50, int((x_1 - x_0) * 50))
+        return quad(self, x_0, x_1, limit=limit, epsrel=1e-10, epsabs=1e-10)[0]
 
 
 class FunctionODE:
@@ -973,6 +1002,31 @@ class HenonHeiles(FunctionODE):
         sol = solve_ivp(self, (t_0, t_1), x_0, t_eval=t_eval, rtol=1e-8)
         return sol.t, sol.y.T
 
+    def calc_E(self, x):
+        """Return the total energy of the system."""
+        out = 0.5 * np.sum(x ** 2) + self.lamda * (x[0] ** 2 * x[2] - x[2] ** 3 / 3)
+        return out
+
+    def sample_initial_x(self):
+        """ Uniformly sample x with energy 1/6. """
+        x = np.zeros(4)
+
+        # sample position
+        a = np.array((0, 1))
+        b = np.array((-0.5 * 3 ** 0.5, -0.5))
+        c = np.array((0.5 * 3 ** 0.5, -0.5))
+        r = np.random.random(2)
+        x[[0, 2]] = (1 - r[0] ** 0.5) * a + r[0] ** 0.5 * (1 - r[1]) * b + r[0] ** 0.5 * r[1] * c
+        pot_energy = 0.5 * np.sum(x ** 2) + self.lamda * (x[0] ** 2 * x[2] - x[2] ** 3 / 3)
+        kin_energy = max(0.16666 - pot_energy, 0)
+
+        # sample velocity
+        v = np.random.normal(size=2)
+        v = v / np.linalg.norm(v) * (2 * kin_energy) ** 0.5
+        x[[1, 3]] = v
+
+        return x
+
 
 class VanDerPol(FunctionODE):
     def __init__(self):
@@ -981,9 +1035,13 @@ class VanDerPol(FunctionODE):
 
     @staticmethod
     def choose_params():
-        mu = 1
-        amplitude = 0  # forcing
-        frequency = 1  # frequency of forcing
+        mu = 5
+        amplitude = 5  # forcing
+        frequency = 2.465  # frequency of forcing
+
+        # mu = 5
+        # amplitude = 50  # forcing
+        # frequency = 7  # frequency of forcing
         return mu, amplitude, frequency
 
     def reset(self, reset_params=True):
@@ -1112,6 +1170,25 @@ class DoublePendulum(FunctionODE):
         T = 0.5 * m1 * (L1 * th1d) ** 2 + 0.5 * m2 * ((L1 * th1d) ** 2 + (L2 * th2d) ** 2 +
                                                       2 * L1 * L2 * th1d * th2d * np.cos(th1 - th2))
         return T + V
+
+    def sample_initial_x(self, energy=10):
+        """ Sample x with certain energy. We set x[1]=x[3]=0, i.e., no inital velocity. """
+        x = np.zeros(4)
+
+        # try to sample x[2] such that a fitting x[0] exists
+        for i in range(1000):
+            theta2 = (2 * np.pi * np.random.random()) - np.pi
+            cos_theta1 = energy + self.m[1] * self.g * self.le[1] * np.cos(theta2)
+            cos_theta1 /= -np.sum(self.m) * self.g * self.le[0]
+            if np.abs(cos_theta1) <= 1:
+                theta1 = np.arccos(cos_theta1)
+                if np.random.random() > 0.5:
+                    theta1 *= -1
+                x[0] = theta1
+                x[2] = theta2
+                return x
+
+        raise RuntimeError(f"Cannot find initial condition with energy {energy}.")
 
 
 def test_pendulum():
