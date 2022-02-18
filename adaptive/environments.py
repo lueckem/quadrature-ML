@@ -1,5 +1,4 @@
 import math
-from copy import deepcopy
 from typing import Optional
 
 import numpy as np
@@ -19,10 +18,10 @@ class IntegrationEnv:
         max_iterations,
         initial_step_size,
         error_tol,
+        nodes_per_integ,
         x0=0.0,
         step_size_range=(0.01, 1),
         max_dist=np.infty,
-        nodes_per_integ=3,
         memory=0,
         reward_fun=None,
     ):
@@ -42,7 +41,7 @@ class IntegrationEnv:
             starting node
         step_size_range : tuple[float]
             (smallest step size, largest step size), the positive rewards are chosen accordingly
-        nodes_per_integ : int, optional
+        nodes_per_integ : int
             how many nodes are used for one iteration
         memory : int, optional
             how many iterations in the past are saved in the state
@@ -62,11 +61,10 @@ class IntegrationEnv:
         self.memory_states = []
 
         self.current_iteration = 0
-        self._nodes = (
-            []
-        )  # contains copies of boundary nodes, for unique nodes use self.nodes
-        self.errors = []
-        self.deltas = []
+        self.nodes = []  # start and end points of subintervals
+        self.errors = []  # step-wise errors
+        self.deltas = []  # chosen step sizes
+        self.integrals = []  # integrals of steps
         self.reps = 0  # counter to keep track of repititions
 
         self.error_tol = error_tol
@@ -77,20 +75,20 @@ class IntegrationEnv:
         else:
             self.reward_fun = reward_fun
 
-    def reset(self, reset_params=True, integrator=None):
+    def reset(self, integrator, reset_params=True):
         """
         Reset the environment and return the initial state.
 
         Parameters
         ----------
+        integrator : Integrator
+            for calculating errors in the initialization phase. If None, the errors are set to 0.
         reset_params : bool, optional
             if a different function should be created from the function class
-        integrator : Integrator, optional
-            for calculating errors in the initialization phase. If None, the errors are set to 0.
 
         Returns
         -------
-        np.ndarray
+        list[np.ndarray]
             the initial state
         """
 
@@ -98,67 +96,29 @@ class IntegrationEnv:
         self.current_iteration = 0
         self.reps = 0
 
-        # calculate nodes and error for first initialization step
-        self._nodes = [
-            self.x0 + k * self.initial_step_size for k in range(self.nodes_per_integ)
-        ]
+        node = self.x0
+        h = self.initial_step_size
+
+        self.nodes = [node]
+        self.deltas = []
         self.errors = []
-        if integrator is None:
-            self.errors.append(0)
-        else:
-            integ = integrator(
-                np.array(
-                    [self.initial_step_size] + self._calc_shifted_funvals(self._nodes)
-                ),
-                self.fun(self.x0),
-            )
-            correct_integ = self.fun.integral(self._nodes[0], self._nodes[-1])
+        self.integrals = []
+        self.memory_states = []
+
+        for i in range(self.memory + 1):
+            self.deltas.append(h)
+            state = integrator.calc_state(node, h, self.fun)
+            self.memory_states.append(state)
+            integ = integrator(state)
+            self.integrals.append(integ)
+            correct_integ = self.fun.integral(node, node + h)
             self.errors.append(abs(integ - correct_integ))
 
-        # calculate nodes and error for further initialization steps (if memory is > 0)
-        for i in range(self.memory):
-            new_nodes = [
-                self._nodes[-1] + k * self.initial_step_size
-                for k in range(self.nodes_per_integ)
-            ]
-            self._nodes.extend(new_nodes)
+            node = node + h
+            self.nodes.append(node)
 
-            if integrator is None:
-                self.errors.append(0)
-            else:
-                integ = integrator(
-                    np.array(
-                        [self.initial_step_size] + self._calc_shifted_funvals(new_nodes)
-                    ),
-                    self.fun(new_nodes[0]),
-                )
-                correct_integ = self.fun.integral(new_nodes[0], new_nodes[-1])
-                self.errors.append(abs(integ - correct_integ))
-
-        self.deltas = [self.initial_step_size] * (self.memory + 1)
-
-        next_state = [self.initial_step_size] + self._calc_shifted_funvals(
-            self._nodes[-self.nodes_per_integ :]
-        )
-        self.memory_states = []
-        for i in range(self.memory):
-            self.memory_states.append(
-                [self.initial_step_size]
-                + self._calc_shifted_funvals(
-                    self._nodes[
-                        -(self.nodes_per_integ - 1) * (i + 2)
-                        - 1 : -(self.nodes_per_integ - 1) * (i + 1)
-                    ]
-                )
-            )
-        next_state_mem = deepcopy(next_state)
-        for s in self.memory_states:
-            next_state_mem.extend(s)
-
-        self.memory_states.insert(0, next_state)
-        self.memory_states.pop()
-
-        return np.asarray(next_state_mem, dtype="float32")
+        self.memory_states.reverse()
+        return self.memory_states.copy()
 
     def iterate(self, step_size, integrator, estimator=None):
         """
@@ -175,7 +135,7 @@ class IntegrationEnv:
 
         Returns
         -------
-        next_state : np.ndarray
+        next_state : list[np.ndarray]
         reward : float
         done : bool
         info : dict
@@ -188,57 +148,49 @@ class IntegrationEnv:
         """
         info = {}
 
-        a = self._nodes[-1]
+        node = self.nodes[-1]
+        if node + step_size > self.nodes[0] + self.max_dist:
+            step_size = max(self.nodes[0] + self.max_dist - node, 1e-8)
         self.deltas.append(step_size)
 
-        # calculate nodes in the current interval and build next_state
-        next_nodes = [a + k * step_size for k in range(self.nodes_per_integ)]
-        next_state = [step_size] + self._calc_shifted_funvals(next_nodes)
+        state = integrator.calc_state(node, step_size, self.fun)
+        integral = integrator(state)
 
         # repeat step
-        if step_size > self.step_size_range[0] and estimator is not None:
-            if estimator.is_error_large(np.asarray(next_state)):
-                step_size = self.step_size_range[0]
-                next_nodes = [a + k * step_size for k in range(self.nodes_per_integ)]
-                next_state = [step_size] + self._calc_shifted_funvals(next_nodes)
-                self.reps += 1
+        # if step_size > self.step_size_range[0] and estimator is not None:
+        #     if estimator.is_error_large(np.asarray(next_state)):
+        #         step_size = self.step_size_range[0]
+        #         next_nodes = [a + k * step_size for k in range(self.nodes_per_integ)]
+        #         next_state = [step_size] + self._calc_shifted_funvals(next_nodes)
+        #         self.reps += 1
         info["step_size"] = step_size
 
         # calculate reward
-        b = next_nodes[-1]
-        correct_integral = self.fun.integral(a, b)
+        correct_integral = self.fun.integral(node, node + step_size)
         info["correct_integral"] = correct_integral
-        info["correct_integral_shifted"] = (
-            correct_integral - self.fun(a) * (self.nodes_per_integ - 1) * step_size
-        )
-        integral = integrator(np.asarray(next_state, dtype="float32"), self.fun(a))
         error = abs(correct_integral - integral)
         info["exact_error"] = error
-        info["f_a"] = self.fun(a)
 
         self.errors.append(error)
+        self.integrals.append(integral)
         reward = self.reward_fun(error, step_size)
 
-        self._nodes = self._nodes + next_nodes
+        next_node = node + step_size
+        self.nodes.append(next_node)
 
-        # include the memory in next_state:
-        next_state_mem = deepcopy(next_state)
-        for s in self.memory_states:
-            next_state_mem.extend(s)
-        self.memory_states.insert(0, next_state)
+        self.memory_states.insert(0, state)
         self.memory_states.pop()
 
-        next_state_mem = np.asarray(next_state_mem, dtype="float32")
         self.current_iteration += 1
         if (
             self.current_iteration >= self.max_iterations
-            or b >= self.x0 + self.max_dist
+            or next_node >= self.x0 + self.max_dist
         ):
             done = True
         else:
             done = False
 
-        return next_state_mem, reward, done, info
+        return self.memory_states.copy(), reward, done, info
 
     def plot(self, x_min=None, x_max=None, episode=0, save=False, show=True):
         """
@@ -250,33 +202,34 @@ class IntegrationEnv:
             right bound of x-axis
         episode : int
             for labeling the file
+        save : bool, optional
+        show : bool, optional
         """
 
         if x_min is None:
             id_min = 0
-            x_min = self._nodes[0]
+            x_min = self.nodes[0]
         else:
-            id_min = next(i for i, node in enumerate(self._nodes) if node >= x_min)
+            id_min = next(i for i, node in enumerate(self.nodes) if node >= x_min)
 
         if x_max is None:
-            id_max = len(self._nodes) - 1
-            x_max = self._nodes[-1]
-        elif x_max < self._nodes[-1]:
-            id_max = next(i for i, node in enumerate(self._nodes) if node > x_max)
+            id_max = len(self.nodes) - 1
+            x_max = self.nodes[-1]
+        elif x_max < self.nodes[-1]:
+            id_max = next(i for i, node in enumerate(self.nodes) if node > x_max)
         else:
-            id_max = len(self._nodes)
+            id_max = len(self.nodes)
 
-        nodes_to_plot = self._nodes[id_min : id_max + 1]
-        nodes_to_plot_unique = np.unique(nodes_to_plot)
-        num_steps = math.ceil((x_max - x_min) / (self.initial_step_size / 8.0))
+        nodes_to_plot = self.nodes[id_min: id_max + 1]
+        num_steps = math.ceil((x_max - x_min) / (self.initial_step_size / self.nodes_per_integ / 8.0))
         x = np.linspace(nodes_to_plot[0], nodes_to_plot[-1], num_steps)
         y = [self.fun(num) for num in x]
-        y_nodes = [self.fun(num) for num in nodes_to_plot_unique]
+        y_nodes = [self.fun(num) for num in nodes_to_plot]
 
-        errors = [val for val in self.errors for _ in range(self.nodes_per_integ)]
-        errors = errors[id_min : id_max + 1]
-        deltas = [val for val in self.deltas for _ in range(self.nodes_per_integ)]
-        deltas = deltas[id_min : id_max + 1]
+        errors = self.errors[id_min : id_max + 1]
+        errors = [self.errors[id_min]] + errors
+        deltas = self.deltas[id_min : id_max + 1]
+        deltas = [self.deltas[id_min]] + deltas
 
         # plt.rcParams.update({'font.size': 14})
         # fig, axs = plt.subplots(3, sharex=True, figsize=(7, 6), dpi=300)
@@ -287,10 +240,10 @@ class IntegrationEnv:
         axs[0].plot(x, y, color=color)
         axs[0].tick_params(axis="y", labelcolor="k")
         color = "tab:green"
-        axs[0].plot(nodes_to_plot_unique, y_nodes, "x", color=color)
+        axs[0].plot(nodes_to_plot, y_nodes, "x", color=color)
         axs[0].plot(
-            nodes_to_plot_unique,
-            np.zeros((len(nodes_to_plot_unique),)),
+            nodes_to_plot,
+            np.zeros((len(nodes_to_plot),)),
             "|",
             color=color,
         )
@@ -298,13 +251,14 @@ class IntegrationEnv:
 
         color = "tab:red"
         axs[1].set_ylabel("error", color=color)
-        axs[1].plot(nodes_to_plot, errors, "x-", color=color)
+        axs[1].step(nodes_to_plot, errors, "x-", color=color)
         axs[1].plot(nodes_to_plot, self.error_tol * np.ones(len(nodes_to_plot)), "k-")
         axs[1].grid()
+        axs[1].set_yscale('log')
 
         color = "tab:blue"
         axs[2].set_ylabel("step size", color=color)
-        axs[2].plot(nodes_to_plot, deltas, "x-", color=color)
+        axs[2].step(nodes_to_plot, deltas, "x-", color=color)
         axs[2].grid()
 
         fig.tight_layout()
@@ -314,53 +268,50 @@ class IntegrationEnv:
             plt.show()
         plt.close()
 
-    def sample_states(self, num_samples):
-        """
-        Uniformly samples the state space for creation of a scaler.
-
-        Parameters
-        ----------
-        num_samples : int
-
-        Returns
-        -------
-        np.ndarray
-            samples, shape (num_samples, self.nodes_per_integ * (memory + 1)
-        """
-        samples = np.zeros((num_samples, self.nodes_per_integ))
-        samples[:, 0] = (
-            self.step_size_range[1] - self.step_size_range[0]
-        ) * np.random.sample(num_samples) + self.step_size_range[0]
-        max_dif = self.fun.maximum() - self.fun.minimum()
-        samples[:, 1:] = (
-            2 * max_dif * np.random.sample((num_samples, self.nodes_per_integ - 1))
-            - max_dif
-        )
-        samples = np.tile(samples, (1, self.memory + 1))
-        print(samples.shape)
-        return samples
-
-    @property
-    def nodes(self):
-        nodes = np.array(self._nodes)
-        return np.unique(nodes)
+    # def sample_states(self, num_samples):
+    #     """
+    #     Uniformly samples the state space for creation of a scaler.
+    #
+    #     Parameters
+    #     ----------
+    #     num_samples : int
+    #
+    #     Returns
+    #     -------
+    #     np.ndarray
+    #         samples, shape (num_samples, self.nodes_per_integ * (memory + 1)
+    #     """
+    #     samples = np.zeros((num_samples, self.nodes_per_integ))
+    #     samples[:, 0] = (
+    #         self.step_size_range[1] - self.step_size_range[0]
+    #     ) * np.random.sample(num_samples) + self.step_size_range[0]
+    #     max_dif = self.fun.maximum() - self.fun.minimum()
+    #     samples[:, 1:] = (
+    #         2 * max_dif * np.random.sample((num_samples, self.nodes_per_integ - 1))
+    #         - max_dif
+    #     )
+    #     samples = np.tile(samples, (1, self.memory + 1))
+    #     print(samples.shape)
+    #     return samples
 
     @property
     def evals(self):
-        return len(self.nodes) + (self.nodes_per_integ - 1) * self.reps
-
-    def _calc_shifted_funvals(self, nodes):
         """
-        For a list of nodes, calculate the function values of (f-f(x_0)), so that the first value is centered to 0.
-            In the output the 0 is left out, so the length of the output is one less than of nodes.
-            nodes has to be in ascending order!
-        """
+        Number function evaluations used.
 
-        out = []
-        shift = self.fun(nodes[0])
-        for node in nodes[1:]:
-            out.append(self.fun(node) - shift)
-        return out
+        If the integrator uses the boundary nodes of subintervals, the output is not correct
+        because the boundary nodes are counted twice.
+
+        Returns
+        -------
+            float
+        """
+        num_subintervals = len(self.nodes) - 1
+        return num_subintervals * self.nodes_per_integ
+
+    @property
+    def integral(self):
+        return np.sum(self.integrals)
 
 
 class ODEEnv:
@@ -588,7 +539,7 @@ class ODEEnv:
         )
 
         if save:
-            fig.savefig("adapt_{}.png".format(episode))
+            fig.savefig("adapt_{}.pdf".format(episode))
         if show:
             plt.show()
         plt.close()

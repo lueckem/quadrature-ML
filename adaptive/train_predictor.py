@@ -5,9 +5,9 @@ from adaptive.build_models import build_value_model
 from adaptive.experience import Experience
 from adaptive.environments import IntegrationEnv
 from adaptive.predictor import PredictorQ
-from adaptive.integrator import Simpson, IntegratorLinReg, Boole
+from adaptive.integrator import Simpson, IntegratorLinReg, Boole, Kronrod21
 from adaptive.performance_tracker import PerformanceTracker
-from functions import Sinus, SuperposeSinus, BrokenPolynomial
+from functions import Sinus, SuperposeSinus, BrokenPolynomial, Pulse, DoublePendulumInteg
 from joblib import dump, load
 
 
@@ -84,55 +84,43 @@ def choose_action3(actions, eps, dim_action):
 def main():
     gamma = 0.0
     num_episodes = 100000
-    # step_sizes = [0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.4]
-    step_sizes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75]
-    # step_sizes = [0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.4]
-    # step_sizes = [0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.67]
-    dim_state = 3  # nodes per integration step
+    step_sizes = [0.25, 0.29, 0.34, 0.4, 0.46, 0.54, 0.63, 0.73, 0.85, 1]
+    step_sizes = np.geomspace(0.1, 0.7, 20)
+    error_tol = 1e-7
     dim_action = len(step_sizes)
     memory = 0  # how many integration steps the predictor can look back
+    integrator = Kronrod21()
+    dim_state = integrator.num_nodes + 1
+    x0 = 0
+    x1 = 100
 
-    # 7.5e-6
-    env = IntegrationEnv(fun=Sinus(), max_iterations=256, initial_step_size=0.075,
-                         error_tol=7.5e-6, nodes_per_integ=dim_state, memory=memory,
-                         x0=0, max_dist=20, step_size_range=(step_sizes[0], step_sizes[-1]))
-    # env = IntegrationEnv(fun=Sinus(), max_iterations=128, initial_step_size=0.1, step_sizes=step_sizes,
-    #                      error_tol=0.0005, nodes_per_integ=dim_state, memory=memory)
+    scaler = load("scaler_integ.pkl")
+    env = IntegrationEnv(fun=DoublePendulumInteg(x0, x1), max_iterations=10000, initial_step_size=step_sizes[0],
+                         error_tol=error_tol, nodes_per_integ=dim_state - 1, memory=memory,
+                         x0=x0, max_dist=x1 - x0, step_size_range=(step_sizes[0], step_sizes[-1]))
     experience = Experience(batch_size=32)
 
     predictor = PredictorQ(step_sizes=step_sizes,
                            model=build_value_model(dim_state=dim_state, dim_action=dim_action,
-                                                   filename=None, lr=0.00001, memory=memory),
-                           scaler=load('model_quad/model_sinus/Simpson/scaler.bin'))
-    # integrator = IntegratorLinReg(step_sizes, load('linreg_models.bin'), load('scaler.bin'))
-    # integrator = Boole()
-    integrator = Simpson()
+                                                   filename='predictor', lr=0.001, memory=memory),
+                           scaler=scaler)
 
-    perf_tracker = PerformanceTracker(env, num_testfuns=1000, x0=-1, x1=1)
-    # losses = []
-    # moving_average = []
+    perf_tracker = PerformanceTracker(env, num_testfuns=2, x0=0, x1=50, integrator=integrator)
 
     for episode in range(num_episodes):
-        state = env.reset()
+        state = env.reset(integrator)
         reward_total = 0
         loss_this_episode = 0
         steps = 0
         done = False
         eps = 0.66
 
-        if episode < 0:
-            # eps = 0.01 + (1.0 - 0.01) * math.exp(-0.023 * episode
-            eps = 0.2 + 0.8 * 2.71828 ** (-0.0146068 * episode)  # decrease from 1.0 to approx 0.2 at episode 300
-
         print('episode: {}'.format(episode))
 
         while not done:
             # get action from actor
             actions = predictor.get_actions(state)
-            if episode < 0:
-                action = choose_action(actions, eps, dim_action)
-            else:
-                action = choose_action3(actions, eps, dim_action)
+            action = choose_action2(actions, eps, dim_action)
             step_size = predictor.action_to_stepsize(action)
 
             # execute action
@@ -148,7 +136,7 @@ def main():
             # print(target)
             # print('')
 
-            experience.append(state=state, target=target_actions)
+            experience.append(state=state[0], target=target_actions)
             if experience.is_full() or done:
                 states, targets = experience.get_samples()
                 loss_predictor = predictor.train_on_batch(states, targets)
@@ -160,46 +148,39 @@ def main():
         print('reward: {}'.format(reward_total))
         print('loss_predictor: {}'.format(loss_this_episode))
 
-        # losses.append(loss_this_episode)
-        # if episode % 10 == 0 and len(losses) > 99:
-        #     moving_average.append(np.mean(losses[-100:]))
-        #     plt.plot(moving_average, 'r')
-        #     plt.pause(0.05)
-        if episode % 100 == 0:
+        if episode % 10 == 0:
             perf_tracker.evaluate_performance(predictor, integrator)
             perf_tracker.plot()
             perf_tracker.plot_pareto(num_points=7)
 
-        # if episode % 250 == 0:
-        #     env.plot(episode=episode, x_min=-1.5, x_max=1.5)
-        if episode % 10 == 0:
+        if episode % 2 == 0:
             predictor.model.save_weights('predictor')
 
 
-def save_scaler():
-    # step_sizes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75]
-    # step_sizes = [0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.4]
-    step_sizes = [0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.67]
-    env = IntegrationEnv(fun=Sinus(), max_iterations=256, initial_step_size=0.075,
-                         error_tol=7.5e-6, nodes_per_integ=3, memory=1,
-                         x0=-1, max_dist=2, step_size_range=(step_sizes[0], step_sizes[-1]))
+# def save_scaler():
+#     # step_sizes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75]
+#     # step_sizes = [0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.4]
+#     step_sizes = [0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.67]
+#     env = IntegrationEnv(fun=Sinus(), max_iterations=256, initial_step_size=0.075,
+#                          error_tol=7.5e-6, nodes_per_integ=3, memory=1,
+#                          x0=-1, max_dist=2, step_size_range=(step_sizes[0], step_sizes[-1]))
+#
+#     # build Scaler
+#     scaler = StandardScaler()
+#     scaler.fit(env.sample_states(50000))
+#     dump(scaler, 'scaler_mem1.bin', compress=True)
 
-    # build Scaler
-    scaler = StandardScaler()
-    scaler.fit(env.sample_states(50000))
-    dump(scaler, 'scaler_mem1.bin', compress=True)
 
-
-def visualize_predictor():
-    step_sizes = [0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.67]
-    dim_state = 3
-    dim_action = len(step_sizes)
-    predictor = PredictorQ(step_sizes=step_sizes,
-                           model=build_value_model(dim_state=dim_state, dim_action=dim_action,
-                                                   filename='predictor', lr=0.0001),
-                           scaler=load('scaler.bin'))
-
-    predictor.visualize([0.1, (-1.5, 1.5), (-1.5, 1.5)], step_sizes, flat=True)
+# def visualize_predictor():
+#     step_sizes = [0.05, 0.075, 0.1, 0.125, 0.15, 0.2, 0.3, 0.67]
+#     dim_state = 3
+#     dim_action = len(step_sizes)
+#     predictor = PredictorQ(step_sizes=step_sizes,
+#                            model=build_value_model(dim_state=dim_state, dim_action=dim_action,
+#                                                    filename='predictor', lr=0.0001),
+#                            scaler=load('scaler.bin'))
+#
+#     predictor.visualize([0.1, (-1.5, 1.5), (-1.5, 1.5)], step_sizes, flat=True)
 
 
 if __name__ == '__main__':

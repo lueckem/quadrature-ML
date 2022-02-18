@@ -35,31 +35,34 @@ def integrate_env(predictor, integrator, env, x0, x1, plot=False, estimator=None
     errors : list[float]
         stepwise absolute errors
     """
-    integ = 0.0
     env.x0 = x0
     state = env.reset(reset_params=False, integrator=integrator)
+    # states = [state[0].copy()]
 
     while True:
         action = predictor(state)
         next_state, _, _, info = env.iterate(action, integrator, estimator=estimator)
-        integ += info["correct_integral"]
         state = next_state
-        if env.nodes[-1] > x1:
+        # states.append(state[0].copy())
+        if env.nodes[-1] >= x1:
             break
 
     num_evals = env.evals
-    for idx, node in enumerate(env.nodes[-env.nodes_per_integ + 1:-1]):
-        if node > x1:
-            num_evals += idx - (env.nodes_per_integ - 2)  # delete not needed evaluations
-            break
+    # for idx, node in enumerate(env.nodes[-env.nodes_per_integ + 1:-1]):
+    #     if node > x1:
+    #         num_evals += idx - (env.nodes_per_integ - 2)  # delete not needed evaluations
+    #         break
 
     if plot:
         env.plot(x_min=x0, x_max=x1, episode=0)
 
-    if np.mean(env.errors) > 0.03:
-        env.plot(x_min=-1, x_max=1, episode=666)
+    # scaler = StandardScaler()
+    # scaler.fit(states)
+    # print(scaler.scale_)
+    # print(scaler.mean_)
+    # dump(scaler, "scaler_integ.pkl")
 
-    return integ, num_evals, env.nodes[-1], env.errors
+    return env.integral, num_evals, env.nodes[-1], env.errors
 
 
 def one_fun():
@@ -68,23 +71,29 @@ def one_fun():
     step_sizes = [0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75]
     dim_state = 3
     dim_action = len(step_sizes)
-    env = IntegrationEnv(fun=Sinus(), max_iterations=256, initial_step_size=0.15,
-                         step_sizes=step_sizes, error_tol=0.0005)
-    predictor = PredictorQ(build_value_model(dim_state=dim_state, dim_action=dim_action, filename='predictor'),
-                           load('scaler.bin'))
-    integ, evals, x1, _ = integrate_env(predictor, Simpson(), env, x0, x1, plot=True)
+    memory = 0
+    scaler = load('model_quad/model_sinus/Simpson/scaler.bin')
+
+    env = IntegrationEnv(fun=Sinus(), max_iterations=10000, initial_step_size=0.075,
+                         error_tol=7.5e-6, nodes_per_integ=dim_state, memory=memory,
+                         x0=0, max_dist=10, step_size_range=(step_sizes[0], step_sizes[-1]))
+    predictor = PredictorQ(step_sizes,
+                           build_value_model(dim_state=dim_state, dim_action=dim_action, filename='predictor'),
+                           scaler=scaler)
+    integrator = Simpson()
+    integ, evals, x1, _ = integrate_env(predictor, integrator, env, x0, x1, plot=True)
     print('new x1: {}'.format(x1))
     print('Predictor error: {}'.format(abs(env.fun.integral(x0, x1) - integ)))
     print('Predictor evals: {}'.format(evals))
 
-    env.reset(reset_params=False)
+    env.reset(integrator, reset_params=False)
     asr = AdaptSimpsConstEvals(env.fun, x0, x1)
     integ = asr(evals)
     print('ASR error: {}'.format(abs(env.fun.integral(x0, x1) - integ)))
     print('ASR evals: {}'.format(asr.evals))
     asr.plot()
 
-    env.reset(reset_params=False)
+    env.reset(integrator, reset_params=False)
     simps = Simps(env.fun, x0, x1)
     integ_simps = simps(num_evals=evals)
     print('Simpson error: {}'.format(abs(env.fun.integral(x0, x1) - integ_simps)))

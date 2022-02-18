@@ -1,9 +1,5 @@
 import numpy as np
-import tensorflow as tf
 from sklearn.preprocessing import StandardScaler
-from matplotlib import pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
 from adaptive.integrator import StateODE
 
 
@@ -43,14 +39,14 @@ class PredictorQ(Predictor):
         """
         Parameters
         ----------
-        state : np.ndarray
+        state : list[np.ndarray]
 
         Returns
         -------
         float
             the next step size
         """
-        actions = self.model(self.scaler.transform([state]))
+        actions = self.model(self.scaler.transform([state[0]]))
         action = np.argmax(actions)
         return self.step_sizes[action]
 
@@ -60,13 +56,13 @@ class PredictorQ(Predictor):
 
         Parameters
         ----------
-        state : np.ndarray
+        state : list[np.ndarray]
 
         Returns
         -------
         np.ndarray
         """
-        return self.model(self.scaler.transform([state])).numpy()
+        return self.model(self.scaler.transform([state[0]])).numpy()
 
     def action_to_stepsize(self, action):
         """
@@ -93,60 +89,60 @@ class PredictorQ(Predictor):
         """
         return self.model.train_on_batch(self.scaler.transform(states), actions)
 
-    def visualize(self, domains, step_sizes, flat=False):
-        """
-        Visualize the predicting function in a 3D surface plot.
-
-        Parameters
-        ----------
-        domains : List[int or Tuple[int]]
-            domains for visualization, e.g. if the state is 5-d [0.1, (-1,1), 0, (-1,1), 0.2] would result in a plot
-            where h = 0.1, f3-f1 = 0, f5-f1=0.2 and (f2-f1), (f4-f1) vary between -1 and 1.
-            As the plot is 3D, only 2 domains should be tuples.
-        step_sizes : List[float]
-        flat : bool, optional
-            whether to plot as a surface plot or as a flat heatmap
-        """
-        # find idx of tuples in domains
-        dom_idx = []
-        for idx, domain in enumerate(domains):
-            if isinstance(domain, tuple) and len(domain) == 2:
-                dom_idx.append(idx)
-        if len(dom_idx) != 2:
-            raise ValueError("Need exactly 2 tuples of length 2 in domains.")
-
-        # build data
-        X = np.linspace(domains[dom_idx[0]][0], domains[dom_idx[0]][1], 61)
-        Y = np.linspace(domains[dom_idx[1]][0], domains[dom_idx[1]][1], 61)
-        X, Y = np.meshgrid(X, Y)
-
-        outputs = np.zeros(X.shape)
-        state = domains
-        state[dom_idx[0]] = 0
-        state[dom_idx[1]] = 0
-        state = np.array(state)
-        for i in range(X.shape[0]):
-            for j in range(X.shape[1]):
-                state[dom_idx[0]] = X[i, j]
-                state[dom_idx[1]] = Y[i, j]
-                outputs[i, j] = step_sizes[self.__call__(state)]
-
-        # plot
-        if not flat:
-            fig = plt.figure()
-            ax = fig.gca(projection='3d')
-            surf = ax.plot_surface(X, Y, outputs, cmap=cm.viridis, linewidth=0)
-            ax.set_zlabel('suggested stepsize')
-        else:
-            fig, ax = plt.subplots()
-            surf = ax.pcolormesh(X, Y, outputs, cmap=cm.viridis)
-
-        cbar = fig.colorbar(surf, shrink=0.5, aspect=5)
-        ax.set_xlabel('f2 - f1')
-        ax.set_ylabel('f3 - f1')
-        plt.grid()
-        plt.title('input stepsize: {}'.format(domains[0]))
-        plt.show()
+    # def visualize(self, domains, step_sizes, flat=False):
+    #     """
+    #     Visualize the predicting function in a 3D surface plot.
+    #
+    #     Parameters
+    #     ----------
+    #     domains : List[int or Tuple[int]]
+    #         domains for visualization, e.g. if the state is 5-d [0.1, (-1,1), 0, (-1,1), 0.2] would result in a plot
+    #         where h = 0.1, f3-f1 = 0, f5-f1=0.2 and (f2-f1), (f4-f1) vary between -1 and 1.
+    #         As the plot is 3D, only 2 domains should be tuples.
+    #     step_sizes : List[float]
+    #     flat : bool, optional
+    #         whether to plot as a surface plot or as a flat heatmap
+    #     """
+    #     # find idx of tuples in domains
+    #     dom_idx = []
+    #     for idx, domain in enumerate(domains):
+    #         if isinstance(domain, tuple) and len(domain) == 2:
+    #             dom_idx.append(idx)
+    #     if len(dom_idx) != 2:
+    #         raise ValueError("Need exactly 2 tuples of length 2 in domains.")
+    #
+    #     # build data
+    #     X = np.linspace(domains[dom_idx[0]][0], domains[dom_idx[0]][1], 61)
+    #     Y = np.linspace(domains[dom_idx[1]][0], domains[dom_idx[1]][1], 61)
+    #     X, Y = np.meshgrid(X, Y)
+    #
+    #     outputs = np.zeros(X.shape)
+    #     state = domains
+    #     state[dom_idx[0]] = 0
+    #     state[dom_idx[1]] = 0
+    #     state = np.array(state)
+    #     for i in range(X.shape[0]):
+    #         for j in range(X.shape[1]):
+    #             state[dom_idx[0]] = X[i, j]
+    #             state[dom_idx[1]] = Y[i, j]
+    #             outputs[i, j] = step_sizes[self.__call__(state)]
+    #
+    #     # plot
+    #     if not flat:
+    #         fig = plt.figure()
+    #         ax = fig.gca(projection='3d')
+    #         surf = ax.plot_surface(X, Y, outputs, cmap=cm.viridis, linewidth=0)
+    #         ax.set_zlabel('suggested stepsize')
+    #     else:
+    #         fig, ax = plt.subplots()
+    #         surf = ax.pcolormesh(X, Y, outputs, cmap=cm.viridis)
+    #
+    #     cbar = fig.colorbar(surf, shrink=0.5, aspect=5)
+    #     ax.set_xlabel('f2 - f1')
+    #     ax.set_ylabel('f3 - f1')
+    #     plt.grid()
+    #     plt.title('input stepsize: {}'.format(domains[0]))
+    #     plt.show()
 
 
 class PredictorConst(Predictor):
@@ -155,6 +151,14 @@ class PredictorConst(Predictor):
 
     def __call__(self, state):
         return self.c
+
+
+class PredictorRandom(Predictor):
+    def __init__(self, step_sizes):
+        self.step_sizes = step_sizes
+
+    def __call__(self, state):
+        return np.random.choice(self.step_sizes)
 
 
 class PredictorODE:

@@ -7,9 +7,11 @@ from matplotlib import pyplot as plt
 import joblib
 from sklearn.linear_model import LinearRegression
 
+from functions import HenonHeiles, DoublePendulum
+
 
 class PerformanceTracker:
-    def __init__(self, env, num_testfuns, x0, x1):
+    def __init__(self, env, num_testfuns, x0, x1, integrator):
         """
         Create num_testfuns copies of the IntegrationEnv env with different functions.
         The testfunctions will be integrated from x0 to x1 and the performance will be saved.
@@ -28,7 +30,7 @@ class PerformanceTracker:
         self.envs = [deepcopy(env) for _ in range(num_testfuns)]
         # change the functions
         for e in self.envs:
-            e.reset(reset_params=True)
+            e.reset(integrator, reset_params=True)
         # keep track of past errors and num_evals
         self.errors = []
         self.num_evals = []
@@ -52,7 +54,7 @@ class PerformanceTracker:
         steps = []
         rewards = []
         for env in self.envs:
-            state = env.reset(reset_params=False)
+            state = env.reset(integrator, reset_params=False)
             env.x0 = self.x0
             reward_stepwise = 0
             while True:
@@ -62,12 +64,12 @@ class PerformanceTracker:
                 if env.nodes[-1] > self.x1:
                     break
 
-            errors.append(np.mean(env.errors[2:]))
+            errors.append(np.mean(env.errors))
             steps.append(len(env.nodes))
-            for idx, node in enumerate(env.nodes[-env.nodes_per_integ + 1:-1]):
-                if node > self.x1:
-                    steps[-1] += idx - (env.nodes_per_integ - 2)  # delete not needed evaluations
-                    break
+            # for idx, node in enumerate(env.nodes[-env.nodes_per_integ + 1:-1]):
+            #     if node > self.x1:
+            #         steps[-1] += idx - (env.nodes_per_integ - 2)  # delete not needed evaluations
+            #         break
             reward_stepwise /= steps[-1]
             rewards.append(reward_stepwise)
 
@@ -141,13 +143,15 @@ class PerformanceTrackerODE:
 
         self.optimize_integrator = optimize_integrator
 
-    def evaluate_performance(self, predictor):
+    def evaluate_performance(self, predictor, nfev=0):
         """
         Evaluate average performance of predictor on the saved test functions.
 
         Parameters
         ----------
         predictor : PredictorODE
+        nfev : int, optional
+            number of function evaluations the model has trained on
 
         Returns
         -------
@@ -163,10 +167,16 @@ class PerformanceTrackerODE:
         target = []  # save history of correct integrations
 
         for env in self.envs:
+            env.x0 = DoublePendulum().sample_initial_x(20)
+            initial_energy = DoublePendulum().calc_E(env.x0)
             state = env.reset(reset_params=False, integrator=self.integrator)
             env.t0 = self.t0
             reward_stepwise = 0
             while True:
+                energy = DoublePendulum().calc_E(env.nodes[-1])
+                if energy / initial_energy > 1.3:
+                    env.errors[-1] = 100 * env.error_tol
+                    break
                 node = env.nodes[-1]
                 action = predictor(state)
                 state, reward, _, info = env.iterate(action, self.integrator)
@@ -188,7 +198,7 @@ class PerformanceTrackerODE:
         self.num_evals.append(this_num_evals)
         self.rewards.append(this_reward)
         self.best_models.add_model(predictor.model.get_weights(), this_error, this_num_evals, this_reward,
-                                   self.integrator.b)
+                                   self.integrator.b, nfev=nfev)
 
         if self.optimize_integrator:
             dim_state = 6
@@ -255,8 +265,9 @@ class BestPredictors:
         self.num_evals = []
         self.rewards = []
         self.weights_integrator = []
+        self.nfev_training = []
 
-    def add_model(self, weights, error, num_eval, reward, weights_integrator):
+    def add_model(self, weights, error, num_eval, reward, weights_integrator, nfev=0):
         """
         Parameters
         ----------
@@ -265,6 +276,8 @@ class BestPredictors:
         num_eval : float
         reward : float
         weights_integrator : np.ndarray
+        nfev : int, optional
+            number of function evaluations the model has trained on
         """
         if not self._is_dominated(error, num_eval):
 
@@ -275,6 +288,7 @@ class BestPredictors:
                     self.weights.pop(i)
                     self.rewards.pop(i)
                     self.weights_integrator.pop(i)
+                    self.nfev_training.pop(i)
 
             print(f"BestPredictor: Added model with (err, nfev) = ({error},{num_eval}).")
             self.weights.append(weights)
@@ -282,6 +296,7 @@ class BestPredictors:
             self.num_evals.append(num_eval)
             self.rewards.append(reward)
             self.weights_integrator.append(weights_integrator)
+            self.nfev_training.append(nfev)
 
     def _is_dominated(self, error, num_eval):
         """

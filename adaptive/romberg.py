@@ -172,7 +172,7 @@ class Romberg:
         axs[1].grid()
 
         fig.tight_layout()
-        plt.savefig('rom.png', figsize=(10, 7), dpi=150)
+        plt.savefig('rom.png', dpi=150)
         plt.close()
 
 
