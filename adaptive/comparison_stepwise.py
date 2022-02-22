@@ -11,11 +11,12 @@ from adaptive.predictor import *
 from adaptive.comparison import integrate_env
 from adaptive.integrator import Simpson, IntegratorLinReg, Boole, Kronrod21, Gauss21
 from matplotlib import pyplot as plt
+from adaptive.plots import plot_pareto
 
 
 def one_fun():
     x0 = 0
-    x1 = 100
+    x1 = 50
     step_sizes = np.geomspace(0.1, 0.7, 20)
     dim_state = 22
     dim_action = len(step_sizes)
@@ -23,6 +24,7 @@ def one_fun():
     scaler = load("scaler_integ.pkl")
 
     integrator = Gauss21()
+    # integrator = IntegratorLinReg(step_sizes, load("linreg_integrator.bin"), integrator)
     env = IntegrationEnv(fun=DoublePendulumInteg(x0, x1), max_iterations=10000, initial_step_size=step_sizes[0],
                          error_tol=1e-7, nodes_per_integ=integrator.num_nodes, memory=memory,
                          x0=x0, max_dist=x1 - x0, step_size_range=(step_sizes[0], step_sizes[-1]))
@@ -381,13 +383,14 @@ def one_fun():
 def pareto_model():
     x0 = 0
     x1 = 100
-    num_samples = 20
+    num_samples = 30
     memory = 0
     step_sizes = np.geomspace(0.1, 0.7, 20)
     dim_state = 22
     dim_action = len(step_sizes)
     scaler = load("scaler_integ.pkl")
-    integrator = Gauss21()
+    integrator = Kronrod21()
+    # integrator = IntegratorLinReg(step_sizes, load("linreg_integrator.bin"), integrator)
 
     env = IntegrationEnv(fun=DoublePendulumInteg(x0, x1), max_iterations=1000, initial_step_size=step_sizes[0],
                          error_tol=0.0005, memory=memory, nodes_per_integ=dim_state - 1, max_dist=x1 - x0)
@@ -408,14 +411,15 @@ def pareto_model():
         performance[i, 1] = evals / this_x1
 
     print(np.mean(performance, axis=0))
-    np.save('pareto_model_g21.npy', performance)
+    np.save('pareto_model2.npy', performance)
 
 
 def pareto_const():
     x0 = 0
     x1 = 100
     num_samples = 20
-    step_sizes = np.geomspace(0.18, 0.3, 4)
+    # step_sizes = np.geomspace(0.2, 0.27, 4)
+    step_sizes = [0.222, 0.245, 0.265]
     integrator = Gauss21()
 
     paretos = []
@@ -448,12 +452,12 @@ def pareto_quad():
     num_samples = 30
     x0 = 0
     x1 = 100
-    tols = [5e-4, 1e-4, 1e-5]
+    tols = [2e-4, 5e-4, 8e-4, 3e-3]
     f = DoublePendulumInteg(x0, x1)
     limit = int((x1 - x0) * 50)
 
     # pre-cut the integral from x0 to x1 into subintervals before applying quad to each
-    num_initial_intervals = 200
+    num_initial_intervals = 286
 
     initial_interval_length = (x1 - x0) / num_initial_intervals
     initial_interval_boundaries = []
@@ -494,7 +498,7 @@ def pareto_quad():
         print("fevals: {}".format(np.mean(fevals)))
 
     paretos = np.array(paretos)
-    np.save('pareto_quad_precut2.npy', paretos)
+    np.save('pareto_precut_035.npy', paretos)
 
 
 def pareto_clenshaw_curtis():
@@ -553,18 +557,19 @@ def pareto_clenshaw_curtis():
     np.save('pareto_quad_cc.npy', paretos)
 
 
-
-def plot_pareto():
+def plot_paretos():
     pareto_scipy_quad = np.load('pareto_quad.npy')
     pareto_scipy_quad2 = np.load('pareto_quad2.npy')
     pareto_scipy_quad_precut = np.load('pareto_quad_precut.npy')
-    pareto_scipy_quad_precut2 = np.load('pareto_quad_precut2.npy')
+    pareto_scipy_quad_precut2 = np.load('pareto_precut_035.npy')[[0, 2, 3]]
     pareto_constant = np.load('pareto_const.npy')
     pareto_constant_g21 = np.load('pareto_const_g21.npy')
     pareto_mod = np.load('pareto_model.npy')
     pareto_mod = np.mean(pareto_mod, axis=0)
     pareto_mod_g21 = np.load('pareto_model_g21.npy')
     pareto_mod_g21 = np.mean(pareto_mod_g21, axis=0)
+    pareto_mod_optim = np.load('pareto_model_optim_weights.npy')
+    pareto_mod_optim = np.mean(pareto_mod_optim, axis=0)
     # pareto_as = np.load('pareto_asr.npy')
     # pareto_mem1 = np.load('pareto_model_mem1.npy')
     # pareto_mem2 = np.load('pareto_model_mem2.npy')
@@ -574,33 +579,62 @@ def plot_pareto():
     # pareto_quad = np.load('pareto_quad.npy')
     # pareto_linreg_estim = np.load('pareto_linreg_estim.npy')
 
-    fig = plt.figure(figsize=(5, 4), dpi=300)
-    # plt.xlim((1.5e-5, 2e-4))
-    # plt.ylim((70, 400))
-    plt.loglog(pareto_scipy_quad[:, 0], pareto_scipy_quad[:, 1], 'bx-', label='quad (GK21, subdivision)')
-    plt.loglog(pareto_scipy_quad2[:, 0], pareto_scipy_quad2[:, 1], 'bo-', label='quad2 (GK21, subdivision)')
-    plt.loglog(pareto_scipy_quad_precut[:, 0], pareto_scipy_quad_precut[:, 1], 'bs-', label='quad (GK21, subdivision, precut 1.0)')
-    plt.loglog(pareto_scipy_quad_precut2[:, 0], pareto_scipy_quad_precut2[:, 1], 'bv-', label='quad (GK21, subdivision, precut 0.5)')
-    # plt.loglog(pareto_scipy_quad_cc[:, 0], pareto_scipy_quad_cc[:, 1], 'mx-',
-    #            label='quad (Clenshaw-Curtis)')
-    plt.loglog(pareto_constant[:, 0], pareto_constant[:, 1], 'gx-', label='K21, const. step size')
-    plt.loglog(pareto_constant_g21[:, 0], pareto_constant_g21[:, 1], 'go-', label='G21, const. step size')
+    # fig = plt.figure(figsize=(5, 4), dpi=300)
+    # # plt.xlim((1.5e-5, 2e-4))
+    # # plt.ylim((70, 400))
+    # plt.loglog(pareto_scipy_quad[:, 0], pareto_scipy_quad[:, 1], 'bx-', label='quad (GK21, subdivision)')
+    # plt.loglog(pareto_scipy_quad2[:, 0], pareto_scipy_quad2[:, 1], 'bo-', label='quad2 (GK21, subdivision)')
+    # plt.loglog(pareto_scipy_quad_precut[:, 0], pareto_scipy_quad_precut[:, 1], 'bs-', label='quad (GK21, subdivision, precut 1.0)')
+    # plt.loglog(pareto_scipy_quad_precut2[:, 0], pareto_scipy_quad_precut2[:, 1], 'bv-', label='quad (GK21, subdivision, precut 0.5)')
+    # # plt.loglog(pareto_scipy_quad_cc[:, 0], pareto_scipy_quad_cc[:, 1], 'mx-',
+    # #            label='quad (Clenshaw-Curtis)')
+    # plt.loglog(pareto_constant[:, 0], pareto_constant[:, 1], 'gx-', label='K21, const. step size')
+    # plt.loglog(pareto_constant_g21[:, 0], pareto_constant_g21[:, 1], 'go-', label='G21, const. step size')
+    #
+    # plt.loglog(pareto_mod[0], pareto_mod[1], 'rv', label='model (K21)')
+    # plt.loglog(pareto_mod_g21[0], pareto_mod_g21[1], 'rs', label='model (G21)')
+    # plt.loglog(pareto_mod_optim[0], pareto_mod_optim[1], 'mo', label='model (optimized weights)')
+    #
+    # plt.legend(loc="upper right", framealpha=0.7)
+    # plt.xlabel('error per step')
+    # plt.ylabel('number of steps')
+    # plt.grid(which='both')
+    # plt.tight_layout()
+    # plt.savefig('pareto.png')
+    # plt.show()
 
-    plt.loglog(pareto_mod[0], pareto_mod[1], 'rv', label='model (K21)')
-    plt.loglog(pareto_mod_g21[0], pareto_mod_g21[1], 'rs', label='model (G21)')
-
-    plt.legend(loc="upper right", framealpha=0.7)
-    plt.xlabel('error per step')
-    plt.ylabel('number of steps')
-    plt.grid(which='both')
-    plt.tight_layout()
-    plt.savefig('pareto.png')
+    fig, ax = plot_pareto(pareto_mod, pareto_scipy_quad, pareto_scipy_quad_precut2, pareto_mod_g21, plot_scatter=False)
+    ax.loglog(
+        pareto_constant_g21[:, 0],
+        pareto_constant_g21[:, 1],
+        color="tab:blue",
+        marker="+",
+        label="G21 (const. step size)",
+    )
+    ax.loglog(
+        pareto_mod_optim[0],
+        pareto_mod_optim[1],
+        color="tab:orange",
+        marker="d",
+        markersize=3,
+        linestyle="None",
+        label="Model (optim. weights)",
+        alpha=0.8
+    )
+    ax.legend(
+        loc="best",
+        fontsize="xx-small",
+        markerfirst=False,
+        framealpha=0.6,
+        ncol=1,
+        columnspacing=0,
+    )
+    plt.savefig("pareto.pdf")
     plt.show()
 
 
 def test_scipy_quad():
-    # scipy.quad uses (G10, K21) Gauss-Kronrod quadrature, so each step has 21 evaluations and the next step-size
-    # is estimated via the error-estimate abs(G10 - K21)
+    # scipy.quad uses (G10, K21) Gauss-Kronrod quadrature
     x0 = -1
     x1 = 1
     f = BrokenPolynomial()
@@ -625,5 +659,5 @@ if __name__ == '__main__':
     # pareto_quad()
     # pareto_clenshaw_curtis()
     # pareto_romberg()
-    plot_pareto()
+    plot_paretos()
 

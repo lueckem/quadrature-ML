@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 
 from adaptive.error_estimator import Estimator
 from adaptive.integrator import Integrator, IntegratorODE, Simpson, StateODE
-from adaptive.plots import plot_trajectory
+from adaptive.plots import plot_trajectory, plot_trajectory_quad
 from adaptive.reward_functions import Reward, RewardExp, RewardLog10
 from functions import Function, FunctionODE
 
@@ -141,10 +141,7 @@ class IntegrationEnv:
         info : dict
             additional information about the integration step:
             "correct_integral"
-            "correct_integral_shifted"
             "exact_error"
-            "f_a"
-            "step_size"
         """
         info = {}
 
@@ -163,7 +160,6 @@ class IntegrationEnv:
         #         next_nodes = [a + k * step_size for k in range(self.nodes_per_integ)]
         #         next_state = [step_size] + self._calc_shifted_funvals(next_nodes)
         #         self.reps += 1
-        info["step_size"] = step_size
 
         # calculate reward
         correct_integral = self.fun.integral(node, node + step_size)
@@ -206,64 +202,16 @@ class IntegrationEnv:
         show : bool, optional
         """
 
-        if x_min is None:
-            id_min = 0
-            x_min = self.nodes[0]
-        else:
-            id_min = next(i for i, node in enumerate(self.nodes) if node >= x_min)
-
-        if x_max is None:
-            id_max = len(self.nodes) - 1
-            x_max = self.nodes[-1]
-        elif x_max < self.nodes[-1]:
-            id_max = next(i for i, node in enumerate(self.nodes) if node > x_max)
-        else:
-            id_max = len(self.nodes)
-
-        nodes_to_plot = self.nodes[id_min: id_max + 1]
-        num_steps = math.ceil((x_max - x_min) / (self.initial_step_size / self.nodes_per_integ / 8.0))
-        x = np.linspace(nodes_to_plot[0], nodes_to_plot[-1], num_steps)
-        y = [self.fun(num) for num in x]
-        y_nodes = [self.fun(num) for num in nodes_to_plot]
-
-        errors = self.errors[id_min : id_max + 1]
-        errors = [self.errors[id_min]] + errors
-        deltas = self.deltas[id_min : id_max + 1]
-        deltas = [self.deltas[id_min]] + deltas
-
-        # plt.rcParams.update({'font.size': 14})
-        # fig, axs = plt.subplots(3, sharex=True, figsize=(7, 6), dpi=300)
-        fig, axs = plt.subplots(3, sharex=True)
-        color = "tab:blue"
-        axs[0].set_xlabel("x", color="k")
-        axs[0].set_ylabel("f(x)", color=color)
-        axs[0].plot(x, y, color=color)
-        axs[0].tick_params(axis="y", labelcolor="k")
-        color = "tab:green"
-        axs[0].plot(nodes_to_plot, y_nodes, "x", color=color)
-        axs[0].plot(
-            nodes_to_plot,
-            np.zeros((len(nodes_to_plot),)),
-            "|",
-            color=color,
+        fig, ax = plot_trajectory_quad(
+            nodes=self.nodes,
+            f=self.fun,
+            errors=self.errors,
+            deltas=self.deltas,
+            error_tolerance=self.error_tol
         )
-        axs[0].grid()
 
-        color = "tab:red"
-        axs[1].set_ylabel("error", color=color)
-        axs[1].step(nodes_to_plot, errors, "x-", color=color)
-        axs[1].plot(nodes_to_plot, self.error_tol * np.ones(len(nodes_to_plot)), "k-")
-        axs[1].grid()
-        axs[1].set_yscale('log')
-
-        color = "tab:blue"
-        axs[2].set_ylabel("step size", color=color)
-        axs[2].step(nodes_to_plot, deltas, "x-", color=color)
-        axs[2].grid()
-
-        fig.tight_layout()
         if save:
-            plt.savefig("adapt_{}.png".format(episode))
+            fig.savefig("quad_{}.pdf".format(episode))
         if show:
             plt.show()
         plt.close()

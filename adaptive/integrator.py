@@ -249,18 +249,23 @@ class Gauss21(Integrator):
 
 
 class IntegratorLinReg(Integrator):
-    def __init__(self, step_sizes, models):
+    def __init__(self, step_sizes, models, base_integrator):
         """
         Integrator that uses a linear regression model for each step size.
+
+        The nodes are the same as base_integrator, but the weights are optimized.
 
         Parameters
         ----------
         step_sizes : list[float]
         models : list[LinearRegression]
             input are the function evals [f_1,...,f_n] and output the integral
+        base_integrator : Integrator
         """
         self.step_sizes = np.array(step_sizes)
         self.models = models
+        self.base_integrator = base_integrator
+        self.num_nodes = base_integrator.num_nodes
 
     def __call__(self, state):
         """
@@ -275,10 +280,29 @@ class IntegratorLinReg(Integrator):
             approximated integral
         """
         step_size = state[0]
-        idx = np.argwhere(np.isclose(self.step_sizes, step_size))[0, 0]
         f_evals = state[1:]
-        integral = self.models[idx].predict([f_evals])[0]
+
+        if step_size in self.step_sizes:
+            idx = np.argwhere(np.isclose(self.step_sizes, step_size))[0, 0]
+            integral = self.models[idx].predict([f_evals])[0]
+        else:
+            integral = self.base_integrator(state)
         return integral
+
+    def calc_state(self, a, h, f):
+        """
+        Parameters
+        ----------
+        a : float
+        h : float
+            step size
+        f : Function
+
+        Returns
+        -------
+        np.ndarray
+        """
+        return self.base_integrator.calc_state(a, h, f)
 
 
 class StateODE:
