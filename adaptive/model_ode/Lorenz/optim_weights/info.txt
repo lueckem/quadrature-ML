@@ -5,7 +5,7 @@ env.x0 = 20 * np.random.random(3) - 10
 env.x0[2] += 25
 
 integrator = RKDP()
-max_dist=100
+max_dist=50
 
 
 ----scaler---

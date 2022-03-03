@@ -1,16 +1,14 @@
-step_sizes = [0.02, 0.022, 0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
+step_sizes = [0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
 error_tol = 0.0001
-
-env.x0 = 20 * np.random.random(3) - 10
-env.x0[2] += 25
-
 integrator = RKDP()
-max_dist=100
 
 
 ----scaler---
-    scaler = test_scaler.pkl
-    
+    scaler = StandardScaler()
+    scaler.mean_ = np.zeros((dim_state * d + 1) * (memory + 1))
+    scaler.mean_[0] = -0.045
+    scaler.scale_ = 10 * np.ones((dim_state * d + 1) * (memory + 1))
+    scaler.scale_[0] = 0.1
 
 ----model----
     dim_state = dim_state * (memory + 1)

@@ -1,9 +1,6 @@
-step_sizes = [0.02, 0.022, 0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
-error_tol = 0.0001
-
-env.x0 = 20 * np.random.random(3) - 10
-env.x0[2] += 25
-
+step_sizes = [0.42, 0.44, 0.46, 0.48, 0.5, 0.52, 0.56, 0.6]
+error_tol = 0.00001
+x0 = np.array([0, 0.5, 0, 0])
 integrator = RKDP()
 max_dist=100
 

@@ -1,9 +1,12 @@
-step_sizes = [0.02, 0.022, 0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
+step_sizes = np.geomspace(0.014, 0.1, 20)
+
+[0.014      0.01552632 0.01721905 0.01909633 0.02117827 0.0234872
+ 0.02604785 0.02888767 0.03203709 0.03552988 0.03940346 0.04369935
+ 0.04846359 0.05374725 0.05960694 0.06610548 0.07331251 0.08130528
+ 0.09016944 0.1       ]
+
 error_tol = 0.0001
-
-env.x0 = 20 * np.random.random(3) - 10
-env.x0[2] += 25
-
+x0 = DoublePendulum().sample_initial_x(energy=20)
 integrator = RKDP()
 max_dist=100
 
@@ -24,3 +27,7 @@ max_dist=100
     outputs = tf.keras.layers.Dense(dim_action)(x)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+
+RK45 tols:
+[3e-6, 4e-6, 6e-6]

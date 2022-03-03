@@ -1,11 +1,8 @@
-step_sizes = [0.02, 0.022, 0.025, 0.029, 0.033, 0.039, 0.045, 0.052, 0.060, 0.070]
+step_sizes = [0.56, 0.58, 0.6, 0.62, 0.65, 0.68, 0.71, 0.74, 0.77, 0.8]
 error_tol = 0.0001
-
-env.x0 = 20 * np.random.random(3) - 10
-env.x0[2] += 25
-
+x0 = HenonHeiles().sample_initial_x()
 integrator = RKDP()
-max_dist=100
+max_dist=500
 
 
 ----scaler---
