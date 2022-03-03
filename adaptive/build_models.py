@@ -32,7 +32,7 @@ def build_value_model(dim_state, dim_action, filename=None, lr=0.001, memory=0):
     outputs = tf.keras.layers.Dense(dim_action)(x)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    optimizer = tf.keras.optimizers.Adam(lr=lr)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
     model.compile(optimizer=optimizer, loss='mse')
 
     if filename is not None:
@@ -72,7 +72,7 @@ def build_value_modelODE(dim_state, dim_action, filename=None, lr=0.001, memory=
     outputs = tf.keras.layers.Dense(dim_action)(x)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    optimizer = tf.keras.optimizers.Adam(lr=lr)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
     model.compile(optimizer=optimizer, loss='mse')  # !huber loss!
 
     if filename is not None:
@@ -107,7 +107,7 @@ def build_estimator_model(dim_state, filename=None, lr=0.001):
     outputs = tf.keras.layers.Dense(2)(x)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    optimizer = tf.keras.optimizers.Adam(lr=lr)
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
     model.compile(optimizer=optimizer, loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                   metrics=['accuracy'])
 
