@@ -54,7 +54,7 @@ def integrate_env(predictor, integrator, env, x0, x1, plot=False, estimator=None
     #         break
 
     if plot:
-        env.plot(x_min=x0, x_max=x1, episode=0)
+        env.plot(x_min=x0, x_max=x1, episode=0, save=True)
 
     # scaler = StandardScaler()
     # scaler.fit(states)

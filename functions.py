@@ -56,8 +56,8 @@ class Sinus(Function):
     @staticmethod
     def choose_params():
         amplitude = 1.0
-        frequency = 1.5 * pi * np.random.sample()
-        shift = 2.0 * pi * np.random.sample()
+        frequency = pi * np.random.sample() + pi
+        shift = 2 * pi * np.random.sample()
         return amplitude, frequency, shift
 
     def __call__(self, x):
@@ -125,10 +125,10 @@ class SuperposeSinus(Function):
 
 class Sinusoid(Function):
     """ f(x) = A*sin(w*x+phi)*exp(-D*x)
-        A ~ Unif(0,1)
-        w ~ Unif(0,2pi)
+        A = 1
+        w ~ Unif(pi,2pi)
         phi ~ Unif(0,2pi)
-        D ~ Unif(0,3)
+        D ~ Unif(0,0.1)
     """
 
     def __init__(self):
@@ -143,9 +143,9 @@ class Sinusoid(Function):
     @staticmethod
     def choose_params():
         amplitude = 1.0  # np.random.sample()
-        frequency = 1.5 * pi * np.random.sample()
+        frequency = pi * np.random.sample() + pi
         shift = 2.0 * pi * np.random.sample()
-        damping = 0.0  # 3 * np.random.sample()
+        damping = 0.1 * np.random.sample()
         return amplitude, frequency, shift, damping
 
     def __call__(self, x):

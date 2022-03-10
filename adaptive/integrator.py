@@ -40,6 +40,9 @@ class Integrator:
 
 
 class Simpson(Integrator):
+    def __init__(self):
+        self.num_nodes = 3
+
     def __call__(self, state):
         """
         Parameters
@@ -78,6 +81,9 @@ class Simpson(Integrator):
 
 
 class Boole(Integrator):
+    def __init__(self):
+        self.num_nodes = 5
+
     def __call__(self, state):
         """
         Parameters

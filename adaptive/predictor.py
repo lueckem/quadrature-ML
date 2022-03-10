@@ -10,7 +10,7 @@ class Predictor:
 
         Parameters
         ----------
-        state : np.ndarray
+        state : list[np.ndarray]
 
         Returns
         -------

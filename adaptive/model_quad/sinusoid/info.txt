@@ -1,0 +1,30 @@
+step_sizes = np.linspace(0.2, 0.5, 11)
+
+error_tol = 0.0005
+x0 = 0
+x1 = 20
+integrator = Simpson
+fun=Sinusoid
+	f(x) = A*sin(w*x+phi)*exp(-D*x)
+        A = 1
+        w ~ Unif(pi,2pi)
+        phi ~ Unif(0,2pi)
+        D ~ Unif(0,0.1)
+
+
+----scaler---
+    scaler = Id
+    
+
+----model----
+    dim_state = dim_state * (memory + 1)
+    n_hidden = 5 * dim_state
+
+    inputs = tf.keras.Input(shape=(dim_state,), name='state')
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(inputs)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    x = tf.keras.layers.Dense(n_hidden, activation='relu')(x)
+    outputs = tf.keras.layers.Dense(dim_action)(x)
+
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
